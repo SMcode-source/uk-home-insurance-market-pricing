@@ -1,0 +1,116 @@
+# UK home insurance brands tracked by the POC.
+#
+# `underwriter` matters because many visible brands sit on a handful of panels --
+# brand level is the consumer market price, underwriter level is the competitive
+# picture. Track both; see docs/DESIGN.md.
+#
+# `channels` lists where the brand can actually be quoted. Brands with no `pcw`
+# entry are unreachable via comparison sites and must be collected direct --
+# this is the coverage gap no aggregator-only dataset can close.
+#
+# tier: 1 = core weekly collection, 2 = monthly, 3 = opportunistic.
+# Verify underwriter attributions before relying on them commercially; panel
+# arrangements change and are not always publicly disclosed.
+
+brands:
+  - name: Aviva
+    underwriter: Aviva
+    channels: [direct, pcw]
+    tier: 1
+  - name: AXA
+    underwriter: AXA
+    channels: [direct, pcw]
+    tier: 1
+  - name: Direct Line
+    underwriter: Direct Line Group
+    channels: [direct, pcw]
+    tier: 1
+    notes: Historically absent from PCWs; verify current panel presence.
+  - name: Churchill
+    underwriter: Direct Line Group
+    channels: [direct, pcw]
+    tier: 1
+  - name: Privilege
+    underwriter: Direct Line Group
+    channels: [pcw]
+    tier: 2
+  - name: Darwin
+    underwriter: Direct Line Group
+    channels: [pcw]
+    tier: 2
+  - name: Admiral
+    underwriter: Admiral
+    channels: [direct, pcw]
+    tier: 1
+  - name: More Than
+    underwriter: Admiral
+    channels: [direct, pcw]
+    tier: 2
+    notes: RSA UK personal lines moved to Admiral; confirm current status.
+  - name: LV=
+    underwriter: LV= General Insurance
+    channels: [direct, pcw]
+    tier: 1
+  - name: Ageas
+    underwriter: Ageas
+    channels: [pcw]
+    tier: 2
+  - name: Policy Expert
+    underwriter: Policy Expert
+    channels: [direct, pcw]
+    tier: 1
+  - name: Homeprotect
+    underwriter: Avantia
+    channels: [direct]
+    tier: 2
+    notes: Non-standard risk specialist -- useful for flood/subsidence coverage.
+  - name: Saga
+    underwriter: Ageas
+    channels: [direct, pcw]
+    tier: 2
+  - name: NFU Mutual
+    underwriter: NFU Mutual
+    channels: [direct]
+    tier: 2
+    notes: Direct/agency only. Never appears on PCWs.
+  - name: Hiscox
+    underwriter: Hiscox
+    channels: [direct]
+    tier: 3
+    notes: High net worth. Broker and direct only.
+  - name: John Lewis Finance
+    underwriter: Covea
+    channels: [direct, pcw]
+    tier: 2
+  - name: Nationwide
+    underwriter: Aviva
+    channels: [direct]
+    tier: 2
+  - name: Halifax
+    underwriter: Lloyds Banking Group
+    channels: [direct]
+    tier: 2
+  - name: Co-op Insurance
+    underwriter: Markerstudy
+    channels: [direct, pcw]
+    tier: 3
+  - name: Esure
+    underwriter: Esure
+    channels: [pcw]
+    tier: 2
+
+channels:
+  - id: direct
+    label: Direct (insurer own site)
+  - id: pcw_ctm
+    label: Compare the Market
+    kind: pcw
+  - id: pcw_msm
+    label: MoneySuperMarket
+    kind: pcw
+  - id: pcw_confused
+    label: Confused.com
+    kind: pcw
+  - id: pcw_gocompare
+    label: GoCompare
+    kind: pcw

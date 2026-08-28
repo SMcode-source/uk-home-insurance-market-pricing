@@ -1,0 +1,38 @@
+[project]
+name = "mktpricing"
+version = "0.1.0"
+description = "UK home insurance market pricing: per-provider price models and a weekly cheapest-N index"
+requires-python = ">=3.11"
+
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "pyarrow>=14",
+    "pydantic>=2.5",
+    "pyyaml>=6",
+]
+
+[project.optional-dependencies]
+# The comparison harness runs without these -- approaches whose library is
+# missing are reported as skipped rather than silently dropped. Install them to
+# put the full lineup on the leaderboard.
+models = [
+    "scikit-learn>=1.4",
+    "interpret>=0.5",
+    "lightgbm>=4.1",
+    "catboost>=1.2",
+]
+dev = [
+    "pytest>=8",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
