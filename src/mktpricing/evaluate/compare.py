@@ -160,7 +160,7 @@ def rolling_comparison(
     Only approaches exposing `recalibrate` take part; for anything else the two
     regimes are the same computation twice.
 
-    Returns (summary, per_brand, per_week, predictions).
+    Returns (summary, per_brand, per_week, per_brand_week, predictions).
     """
     registry = {
         n: c for n, c in available_approaches().items()
@@ -175,7 +175,7 @@ def rolling_comparison(
         if verbose:
             print("  no approach supports recalibration; nothing to compare")
         empty = pd.DataFrame()
-        return empty, empty, empty, empty
+        return empty, empty, empty, empty, empty
 
     train, test = temporal_split(df, holdout_weeks=holdout_weeks)
     Xtr, ytr = design_matrix(train, include_brand=include_brand)
@@ -227,14 +227,27 @@ def rolling_comparison(
         / np.exp(predictions.y_true) * 100.0
     )
 
+    actual = np.exp(predictions.y_true)
+    predictions["actual"] = actual
+    predictions["abs_err_gbp"] = np.abs(np.exp(predictions.y_pred) - actual)
+
     def _agg(g):
+        # Both the level error and the scatter, because they are different
+        # failures with different fixes: bias is a whole price level in the
+        # wrong place and is correctable, sd is what remains once it is.
         return pd.Series({
             "n": len(g),
+            "mean_actual": g.actual.mean(),
             "mape": g.ape.mean(),
             "mdape": g.ape.median(),
             "bias": g.pe.median(),
+            "mean_pe": g.pe.mean(),
+            "sd_pe": g.pe.std(ddof=1),
             "var_pe": g.pe.var(ddof=1),
+            "within_5pct": (g.ape <= 5).mean() * 100.0,
             "within_10pct": (g.ape <= 10).mean() * 100.0,
+            "within_20pct": (g.ape <= 20).mean() * 100.0,
+            "mae_gbp": g.abs_err_gbp.mean(),
         })
 
     keys = ["approach", "regime"]
@@ -244,7 +257,70 @@ def rolling_comparison(
         _agg, include_groups=False).reset_index()
     per_week = predictions.groupby(keys + ["week"], observed=True).apply(
         _agg, include_groups=False).reset_index()
-    return summary, per_brand, per_week, predictions
+    per_brand_week = predictions.groupby(
+        keys + ["brand", "week"], observed=True).apply(
+        _agg, include_groups=False).reset_index()
+    return summary, per_brand, per_week, per_brand_week, predictions
+
+
+def residual_profile(
+    df: pd.DataFrame,
+    *,
+    approach: str = "gbm_per_brand_trend",
+    holdout_weeks: int = 3,
+    include_brand: bool = True,
+):
+    """Mean residual per brand per week, training weeks and holdout together.
+
+    This is the diagnostic that distinguishes the two reasons a brand can be
+    badly predicted, which call for opposite responses:
+
+      the residual is large in training weeks too
+          the model genuinely cannot fit that brand. Add capacity, or accept
+          that its rating structure is not representable.
+
+      the residual is ~0 in every training week and jumps the week the data
+          ends
+          the fit is fine and the brand repriced. No amount of estimator work
+          recovers this, because the training window contains no evidence of
+          it. Go and collect the next week instead.
+
+    On this project's sample data Churchill is the second: within 0.15% in all
+    nine training weeks, then +8.6%, +17.8%, +21.8%. Two attempts to fix it by
+    extrapolating harder both made it worse before this was measured, which is
+    why the diagnostic is now part of the run rather than an ad-hoc script.
+
+    Residuals are reported as a percentage of premium, from the model with its
+    week clamped to the training window -- i.e. what the point model alone
+    would say, before any forward correction.
+    """
+    cls = available_approaches().get(approach)
+    if cls is None:
+        return pd.DataFrame()
+
+    train, test = temporal_split(df, holdout_weeks=holdout_weeks)
+    Xtr, ytr = design_matrix(train, include_brand=include_brand)
+    model = cls().fit(Xtr, ytr, groups=train["brand"].to_numpy())
+
+    full = pd.concat([train, test], ignore_index=True)
+    Xf, yf = design_matrix(full, include_brand=include_brand)
+    Xf = align_columns(Xf, Xtr)
+    g = full["brand"].to_numpy()
+    pred = np.asarray(model.predict(Xf, groups=g), dtype=float)
+
+    prof = pd.DataFrame({"brand": g, "week": full["week"].to_numpy(),
+                         "resid": yf - pred})
+    out = (
+        prof.groupby(["brand", "week"], observed=True)
+        .apply(lambda s: pd.Series({
+            "n": len(s),
+            "resid_pct": (np.exp(s.resid.mean()) - 1) * 100.0,
+        }), include_groups=False)
+        .reset_index()
+    )
+    last_train = float(train.week.max())
+    out["window"] = np.where(out.week <= last_train, "train", "holdout")
+    return out
 
 
 def first_holdout_week_is_identical(per_week: pd.DataFrame, tol: float = 1e-9) -> bool:

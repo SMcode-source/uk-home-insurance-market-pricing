@@ -262,8 +262,8 @@
     top: 0; left: 0; bottom: 0;
     border-radius: 2px;
   }
-  .bar-was { background: var(--accent-dim); width: calc(var(--was) / 15 * 100%); }
-  .bar-now { background: var(--accent);     width: calc(var(--now) / 15 * 100%); }
+  .bar-was { background: var(--accent-dim); width: calc(var(--was) / var(--scale, 15) * 100%); }
+  .bar-now { background: var(--accent);     width: calc(var(--now) / var(--scale, 15) * 100%); }
   .row .fig {
     font-family: var(--mono);
     font-size: .8rem;
@@ -304,7 +304,7 @@
   .wk .col {
     background: var(--accent-dim);
     border-radius: 2px 2px 0 0;
-    height: calc(var(--v) / 22 * 100%);
+    height: calc(var(--v) / var(--scale, 22) * 100%);
     min-height: 2px;
   }
   .wk.after .col { background: var(--bad); }
@@ -429,6 +429,7 @@
     <h2>Typically within about 4% of the actual premium</h2>
     <p class="lede">Across 7,353 quotes in three held-out weeks, the median prediction lands 4.1% away from what the insurer actually charged. The average miss is larger, at 6.0%, because a minority of quotes are badly wrong and pull the mean up.</p>
 
+    <!-- gen:headline -->
     <div class="stats">
       <div class="stat"><span class="k">4.1<span class="dim">%</span></span><span class="l">Median absolute error &mdash; the typical quote</span></div>
       <div class="stat"><span class="k">6.0<span class="dim">%</span></span><span class="l">Mean absolute error &mdash; pulled up by the tail</span></div>
@@ -437,6 +438,7 @@
     </div>
 
     <p>Those are the figures for the system as it would actually run, re-reading the panel each week before pricing the next one. Held fully blind for all three weeks instead &mdash; no refresh at all &mdash; it degrades to 4.5% median, 7.0% mean and 77% within 10%. Both numbers appear throughout this page, and the difference between them is the subject of <a href="#churchill">the section on Churchill</a>.</p>
+    <!-- /gen:headline -->
 
     <div class="note">
       <div class="h">Read this before the numbers</div>
@@ -456,7 +458,8 @@
         <span><i class="swatch was"></i> Recovered by the refresh</span>
       </div>
 
-      <div class="tracks">
+      <!-- gen:tracks -->
+    <div class="tracks">
         <div class="row"><span class="name">Admiral</span><span class="track"><i class="bar-was" style="--was:3.11"></i><i class="bar-now" style="--now:3.16"></i></span><span class="fig"><b>3.2%</b><span class="arrow">&larr;</span>3.1%</span></div>
         <div class="row"><span class="name">Policy Expert</span><span class="track"><i class="bar-was" style="--was:3.30"></i><i class="bar-now" style="--now:3.21"></i></span><span class="fig"><b>3.2%</b><span class="arrow">&larr;</span>3.3%</span></div>
         <div class="row"><span class="name">Homeprotect</span><span class="track"><i class="bar-was" style="--was:3.47"></i><i class="bar-now" style="--now:3.45"></i></span><span class="fig"><b>3.5%</b><span class="arrow">&larr;</span>3.5%</span></div>
@@ -472,6 +475,7 @@
       </div>
 
       <div class="axis"><span>0%</span><span>5%</span><span>10%</span><span>15%</span></div>
+    <!-- /gen:tracks -->
       <figcaption>Mean absolute percentage error per provider on the three held-out weeks. Providers are ordered by how hard they are to predict.</figcaption>
     </figure>
 
@@ -485,7 +489,8 @@
           <tr><th>Provider</th><th>Quotes</th><th>Mean premium</th><th>Bias</th><th>Spread (SD)</th><th>Mean abs. error</th><th>Within 10%</th><th>Avg miss</th></tr>
         </thead>
         <tbody>
-          <tr><td>Admiral</td><td>395</td><td>&pound;208</td><td class="dim">&minus;0.5%</td><td>5.2</td><td>3.11%</td><td class="pos">94%</td><td>&pound;6</td></tr>
+<!-- gen:provider-table -->
+              <tr><td>Admiral</td><td>395</td><td>&pound;208</td><td class="dim">&minus;0.5%</td><td>5.2</td><td>3.11%</td><td class="pos">94%</td><td>&pound;6</td></tr>
           <tr><td>Policy Expert</td><td>421</td><td>&pound;203</td><td class="dim">&minus;0.5%</td><td>6.9</td><td>3.30%</td><td class="pos">95%</td><td>&pound;5</td></tr>
           <tr><td>Homeprotect</td><td>352</td><td>&pound;422</td><td class="dim">+1.3%</td><td>6.5</td><td>3.47%</td><td class="pos">95%</td><td>&pound;18</td></tr>
           <tr><td>AXA</td><td>724</td><td>&pound;214</td><td class="dim">+0.7%</td><td>7.2</td><td>4.05%</td><td class="pos">90%</td><td>&pound;8</td></tr>
@@ -497,7 +502,10 @@
           <tr><td>Ageas</td><td>500</td><td>&pound;273</td><td>+6.8%</td><td>7.7</td><td>7.23%</td><td>78%</td><td>&pound;23</td></tr>
           <tr><td>LV=</td><td>726</td><td>&pound;300</td><td>&minus;4.0%</td><td>9.4</td><td>8.26%</td><td class="neg">58%</td><td>&pound;32</td></tr>
           <tr><td>Churchill</td><td>1,084</td><td>&pound;363</td><td class="neg">&minus;14.8%</td><td>10.5</td><td>14.24%</td><td class="neg">36%</td><td>&pound;64</td></tr>
-          <tr class="tot"><td>All</td><td>7,353</td><td>&pound;323</td><td>&minus;0.6%</td><td>10.5</td><td>6.97%</td><td>77%</td><td>&pound;27</td></tr>
+    <!-- /gen:provider-table -->
+<!-- gen:provider-total -->
+              <tr class="tot"><td>All</td><td>7,353</td><td>&pound;323</td><td>&minus;0.6%</td><td>10.5</td><td>6.97%</td><td>77%</td><td>&pound;27</td></tr>
+    <!-- /gen:provider-total -->
         </tbody>
       </table>
     </div>
@@ -511,7 +519,8 @@
     <p class="lede">Churchill is the worst-predicted provider by a wide margin, at nearly 15% average error against a field where the next worst is 8%. It is worth understanding exactly why, because the obvious explanations are all wrong.</p>
 
     <figure class="card">
-      <div class="weeks">
+      <!-- gen:weeks -->
+    <div class="weeks">
         <div class="wk"><span class="col" style="--v:0.05"></span><span class="lab">0</span></div>
         <div class="wk"><span class="col" style="--v:0.14"></span><span class="lab">1</span></div>
         <div class="wk"><span class="col" style="--v:0.11"></span><span class="lab">2</span></div>
@@ -525,6 +534,7 @@
         <div class="wk after"><span class="col" style="--v:17.83"></span><span class="lab">10</span></div>
         <div class="wk after"><span class="col" style="--v:21.75"></span><span class="lab">11</span></div>
       </div>
+    <!-- /gen:weeks -->
       <div class="divider-note"><span>Weeks 0&ndash;8 trained &middot; weeks 9&ndash;11 held out</span></div>
       <figcaption>How far Churchill&rsquo;s actual prices sat above the model&rsquo;s, week by week. The model tracks Churchill to within 0.15% in <em>every single training week</em>, including the last one &mdash; then Churchill repriced upward by roughly 8&ndash;9% per week the moment the data ran out.</figcaption>
     </figure>
@@ -547,20 +557,24 @@
           <tr><th>Holdout week</th><th>Bias, blind</th><th>Bias, weekly refresh</th><th>Error, blind</th><th>Error, refresh</th></tr>
         </thead>
         <tbody>
-          <tr><td>Week 9</td><td class="neg">&minus;9.5%</td><td class="neg">&minus;9.5%</td><td>8.51%</td><td>8.51%</td></tr>
+<!-- gen:worst-weeks -->
+              <tr><td>Week 9</td><td class="neg">&minus;9.5%</td><td class="neg">&minus;9.5%</td><td>8.51%</td><td>8.51%</td></tr>
           <tr><td>Week 10</td><td class="neg">&minus;19.3%</td><td>&minus;11.6%</td><td>16.20%</td><td>11.93%</td></tr>
           <tr><td>Week 11</td><td class="neg">&minus;23.3%</td><td class="dim">&minus;6.0%</td><td>17.99%</td><td>11.71%</td></tr>
+    <!-- /gen:worst-weeks -->
         </tbody>
       </table>
     </div>
     <figcaption>Week 9 is identical under both regimes by construction &mdash; nothing has been observed yet, so there is nothing to correct. Every gain appears at weeks 10 and 11, which is the evidence that the mechanism is doing what it claims rather than quietly leaking the answer. Churchill&rsquo;s residual error never reaches zero because it is still climbing 8&ndash;9% a week and the correction is always one week behind.</figcaption>
 
+    <!-- gen:before-after -->
     <div class="stats">
       <div class="stat"><span class="k">6.97 <span class="dim">&rarr;</span> <span class="pos">5.97</span></span><span class="l">Mean absolute error, all providers (%)</span></div>
       <div class="stat"><span class="k">14.2 <span class="dim">&rarr;</span> <span class="pos">10.7</span></span><span class="l">Churchill mean absolute error (%)</span></div>
       <div class="stat"><span class="k">77 <span class="dim">&rarr;</span> <span class="pos">82</span></span><span class="l">Quotes within 10% of actual (%)</span></div>
       <div class="stat"><span class="k">110 <span class="dim">&rarr;</span> <span class="pos">84</span></span><span class="l">Variance of percentage error</span></div>
     </div>
+    <!-- /gen:before-after -->
   </section>
 
   <!-- ============ HOW ============ -->
@@ -581,7 +595,8 @@
           <tr><th>Approach</th><th>Temporal</th><th>Spatial</th><th>Within 10% (temporal)</th><th>Fit time</th></tr>
         </thead>
         <tbody>
-          <tr class="best"><td>Boosted trees per brand, drift-corrected</td><td>4.48</td><td>11.86</td><td>77%</td><td>53s</td></tr>
+<!-- gen:leaderboard -->
+              <tr class="best"><td>Boosted trees per brand, drift-corrected</td><td>4.48</td><td>11.86</td><td>77%</td><td>53s</td></tr>
           <tr><td>Boosted trees per brand</td><td>4.60</td><td>11.86</td><td>76%</td><td>10s</td></tr>
           <tr><td>Random forest</td><td>5.30</td><td>12.61</td><td>69%</td><td>21s</td></tr>
           <tr><td>Boosted trees, pooled</td><td>5.63</td><td>10.22</td><td>73%</td><td>3s</td></tr>
@@ -591,6 +606,7 @@
           <tr><td>Ridge on log premium</td><td>13.47</td><td>11.88</td><td>37%</td><td>&lt;1s</td></tr>
           <tr><td>Per-brand geometric mean <span class="dim">(baseline)</span></td><td>42.31</td><td>39.51</td><td>11%</td><td>&lt;1s</td></tr>
           <tr><td>Market geometric mean <span class="dim">(baseline)</span></td><td>47.33</td><td>42.81</td><td>14%</td><td>&lt;1s</td></tr>
+    <!-- /gen:leaderboard -->
         </tbody>
       </table>
     </div>

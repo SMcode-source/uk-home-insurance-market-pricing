@@ -30,7 +30,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from mktpricing.collect.synthetic import generate  # noqa: E402
 from mktpricing.evaluate.compare import (  # noqa: E402
     additivity_gap, first_holdout_week_is_identical, format_leaderboard,
-    rolling_comparison, run_comparison,
+    residual_profile, rolling_comparison, run_comparison,
 )
 from mktpricing.evaluate.metrics import per_brand_metrics  # noqa: E402
 from mktpricing.features.build import align_columns, build_matrix, design_matrix  # noqa: E402
@@ -127,7 +127,7 @@ def main() -> int:
 
     # -- 3b. blind vs weekly refresh ---------------------------------------
     _rule("3b. BLIND VS WEEKLY REFRESH  (the operating mode, not just the test)")
-    roll, roll_brand, roll_week, _ = rolling_comparison(
+    roll, roll_brand, roll_week, roll_brand_week, _ = rolling_comparison(
         df, holdout_weeks=args.weeks_holdout, only=args.only, verbose=True,
     )
     if roll.empty:
@@ -138,6 +138,7 @@ def main() -> int:
         roll.to_csv(args.out / "rolling.csv", index=False)
         roll_brand.to_csv(args.out / "rolling_per_brand.csv", index=False)
         roll_week.to_csv(args.out / "rolling_per_week.csv", index=False)
+        roll_brand_week.to_csv(args.out / "rolling_per_brand_week.csv", index=False)
 
         # The first holdout week has nothing observed behind it, so the two
         # regimes must agree exactly. If they ever stop agreeing, the rolling
@@ -161,6 +162,25 @@ def main() -> int:
         print(roll_brand[roll_brand.brand.isin(worst)]
               .pivot_table(index="brand", columns="regime", values=["mape", "bias"])
               .round(2).to_string())
+
+        # Why the worst brand is worst. A residual that is ~0 through every
+        # training week and jumps the week the data ends is a reprice, not an
+        # under-fit, and no estimator work recovers it.
+        prof = residual_profile(df, holdout_weeks=args.weeks_holdout)
+        if not prof.empty:
+            prof.to_csv(args.out / "residual_by_week.csv", index=False)
+            head = worst[0]
+            row = prof[prof.brand == head].sort_values("week")
+            tr = row[row.window == "train"].resid_pct
+            print(f"\n  {head}: residual by week "
+                  f"(train weeks {row.week.min():.0f}-"
+                  f"{row[row.window == 'train'].week.max():.0f}, then holdout)")
+            print("   " + "  ".join(
+                f"{w:.0f}:{v:+.2f}" for w, v in zip(row.week, row.resid_pct)))
+            print(f"  worst training-week residual {tr.abs().max():.2f}% -- "
+                  + ("a reprice after the window closed, not an under-fit."
+                     if tr.abs().max() < 1.0 else
+                     "the fit itself is poor; this is not only drift."))
 
     # -- 4. two-part model + market simulation -----------------------------
     _rule(f"4. TWO-PART MODEL AND TOP-{args.k} MARKET PRICE")

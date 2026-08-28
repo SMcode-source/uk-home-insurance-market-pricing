@@ -471,7 +471,7 @@ def test_rolling_scores_both_regimes_on_the_same_rows():
     from mktpricing.collect.synthetic import generate
 
     risks, quotes, _ = generate(n_risks=120, n_weeks=6, seed=3)
-    summary, per_brand, per_week, preds = _rolling((risks, quotes, None))
+    summary, per_brand, per_week, _bw, preds = _rolling((risks, quotes, None))
     assert set(summary.regime) == {"blind", "rolling"}
     # both regimes must score exactly the same rows, or the comparison is
     # between two different test sets rather than two ways of predicting one
@@ -491,7 +491,7 @@ def test_the_first_holdout_week_is_identical_under_both_regimes():
     from mktpricing.evaluate.compare import first_holdout_week_is_identical
 
     risks, quotes, _ = generate(n_risks=120, n_weeks=6, seed=3)
-    _, _, per_week, _ = _rolling((risks, quotes, None))
+    _, _, per_week, _, _ = _rolling((risks, quotes, None))
 
     first = per_week.week.min()
     got = per_week[per_week.week == first].set_index("regime")
