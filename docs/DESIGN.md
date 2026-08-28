@@ -290,6 +290,72 @@ predictions everywhere has to be right everywhere, and this one was not.
 
 ---
 
+## 15. A structural break is a data problem, not a modelling one
+
+The `*_trend` work of §14 fixed the flat-line and left Churchill at 14.24% MAPE
+against a field whose next worst is 8.26%. The tempting reading is that the model
+under-fits Churchill. It does not.
+
+Per-week mean residual, Churchill, model trained on weeks 0–8:
+
+```
+week   0      1      2      3      4      5      6      7      8  |   9     10     11
+     -0.05  +0.14  -0.11  +0.12   0.00  -0.06  +0.01  -0.11  +0.06 | +8.57 +17.83 +21.75
+```
+
+The fit is essentially exact in every training week including the last, so there
+is no boundary artefact to correct and no capacity to add. Churchill repriced
+after the window closed, while its fitted slope over weeks 0–8 pointed the other
+way at −1.5%/wk. **Weeks 0–8 contain no information about a week-9 break.** Any
+change that improves the holdout number using only that data is fitting the
+answer, and the two attempts that tried both made it worse (14.63% → 15.92% on
+the full-slope version).
+
+So the fix is not a better estimator, it is admitting that the batch evaluation
+models the wrong operating mode. Withholding three weeks at once is the right
+test of pure extrapolation; it is not how the capability runs. The panel is
+re-collected weekly, so week 9's outturn exists before week 10 is priced, and
+declining to use it does not make the measurement honest — it makes it answer a
+question nobody asks.
+
+`TrendAdjusted.recalibrate()` is that, and deliberately only that:
+
+- **Level only.** It re-reads the residual the current model leaves on the most
+  recent observed week and carries it forward as a per-brand offset. The point
+  model is not refitted; shape, interactions and per-brand curves are untouched.
+  A repricing moves a level, so a level is what moves.
+- **Median, not mean.** A minimum premium pins 14–29% of a brand's quotes, and a
+  floored quote does not move when the brand's level moves. The residual is a
+  mixture of moved and unmoved rows; the median tracks the moved majority instead
+  of splitting the difference. For MAE this is strictly better whenever the
+  floored share is under half.
+- **Shrunk when thin.** `n/(n+anchor_rows)` toward the market offset, the same
+  credibility reasoning as the slope. Five quotes is not proof of a 30% reprice.
+- **Accumulating and inert by default.** One call per collection week. A model
+  that has never been recalibrated is bit-identical to the unwrapped approach,
+  which is the same guarantee §14 established and for the same reason.
+
+Measured on weeks 9–11, one point model fitted once, level updated weekly:
+
+| | blind | weekly refresh |
+|---|---|---|
+| pooled MAPE | 6.97% | **5.97%** |
+| pooled MdAPE | 4.48% | **4.12%** |
+| within 10% | 76.5% | **81.7%** |
+| var(PE) | 109.5 | **83.9** |
+| Churchill MAPE | 14.24% | **10.72%** |
+| Churchill bias | −14.78% | **−8.71%** |
+
+Week 9 is bit-identical under both, because nothing has been observed yet. That
+identity is the test that the mechanism is not leaking the holdout: every gain
+appears at weeks 10 and 11, exactly where new information legitimately exists.
+Churchill does not reach zero and should not — it is still climbing 8–9%/wk and
+the correction is always one week behind. That residual is the honest cost of not
+being able to see the future, and it is the right place for it to sit.
+
+The rule this generalises to: when the residual is flat in-sample and jumps the
+week the data ends, stop tuning the estimator and go and get the next week.
+
 ## Known limitations
 
 **Single-identity manual collection.** One real person quoting one real property

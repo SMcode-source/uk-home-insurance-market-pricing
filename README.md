@@ -81,6 +81,38 @@ assumed, since price levels wander more than they march. Expect modest gains
 (4.60% → 4.48% at three weeks here, nothing at one) and read `drift_report()`
 before believing a per-brand slope.
 
+### Structural breaks need new data, not a better extrapolation
+
+Extrapolation has a hard ceiling and it is worth knowing where it sits. On the
+sample data Churchill is fitted to within 0.15% in *every* training week, week 8
+included, then reprices upward ~8–9%/wk from week 9 — while its fitted training
+slope points down at −1.5%/wk. Weeks 0–8 contain no signal about that break, so
+any change that improves Churchill's holdout number from weeks 0–8 alone is
+fitting the answer. Two attempts to extrapolate harder both made it worse.
+
+What is fixable is the operating assumption. The batch evaluation withholds all
+three weeks at once; the real capability re-collects the panel weekly, so week 9
+is in hand before week 10 is priced. `recalibrate()` is how that enters:
+
+```python
+model.fit(X_train, y_train, groups=brands)        # weeks 0-8
+pred_9 = model.predict(X_9, groups=brands_9)      # nothing observed yet
+model.recalibrate(X_9, y_9, groups=brands_9)      # week 9 outturn arrives
+pred_10 = model.predict(X_10, groups=brands_10)   # now corrected
+```
+
+It re-reads each brand's level from the newly observed week and carries it
+forward. It does not refit the point model, so shape and interactions are
+untouched — only the level moves, which is the only thing a repricing changes.
+It uses the median rather than the mean because a minimum premium pins 14–29% of
+a brand's quotes and those rows do not move when the level does. Thin updates are
+shrunk toward the market on the same `n/(n+k)` reasoning as the slope.
+
+Measured over weeks 9–11: pooled MAPE 6.97% → 5.97%, within-10% 76.5% → 81.7%,
+Churchill 14.24% → 10.72% and its bias −14.8% → −8.7%. Week 9 is bit-identical
+under both regimes, which is the evidence the mechanism is not leaking the
+answer. Never call it on rows you then score.
+
 ### The EBM-vs-GBM gap is a measurement, not a race
 
 `additivity_gap()` reports the MdAPE difference between the additive and
@@ -297,13 +329,15 @@ src/mktpricing/
   collect/vendor.py      CI/Defaqto extract mapping + audits
   features/build.py      log-premium target, feature assembly
   features/geo.py        postcode -> flood, crime, deprivation, area value
-  models/                registry + the nine approaches + quotability
+  models/                registry + the eleven approaches + quotability
+  models/drift.py        forward drift correction and weekly recalibration
   evaluate/              splits, metrics, the comparison harness
   market/simulate.py     Monte Carlo -> cheapest-N, weekly index
 scripts/run_poc.py       end-to-end run
 scripts/inspect_vendor.py  profile / map / audit / enrich a vendor extract
 scripts/make_sample_extract.py  synthetic vendor-shaped extract, 8 flavours
 docs/DESIGN.md           why it is built this way -- read before changing models
+ui/index.html            self-contained results summary; open it in a browser
 tests/                   invariants that are easy to break silently
 ```
 

@@ -1,0 +1,633 @@
+<title>Home Insurance Price Accuracy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --ground:      #F6F8F8;
+    --surface:     #FFFFFF;
+    --surface-alt: #EFF3F4;
+    --ink:         #111A1E;
+    --ink-soft:    #35464E;
+    --muted:       #57676F;
+    --line:        #DCE4E6;
+    --line-soft:   #EAF0F1;
+    --accent:      #0F6E78;
+    --accent-soft: #DCEEF0;
+    --accent-dim:  #9CC9CE;
+    --good:        #1E7A52;
+    --warn:        #A8710C;
+    --bad:         #B23A2E;
+    --shadow:      0 1px 2px rgba(17,26,30,.05), 0 8px 24px -16px rgba(17,26,30,.28);
+
+    --display: "Newsreader", Georgia, "Times New Roman", serif;
+    --body:    "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono:    "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
+
+    --measure: 68ch;
+    --pad: clamp(1.1rem, 4vw, 2.75rem);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0E1418;
+      --surface:     #151E23;
+      --surface-alt: #1B262C;
+      --ink:         #E6EEF1;
+      --ink-soft:    #C2D2D9;
+      --muted:       #8FA3AC;
+      --line:        #243138;
+      --line-soft:   #1D272D;
+      --accent:      #4EC6D2;
+      --accent-soft: #0F2E36;
+      --accent-dim:  #2E5C65;
+      --good:        #4FBF87;
+      --warn:        #DEA53E;
+      --bad:         #E8756A;
+      --shadow:      0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0E1418;
+    --surface:     #151E23;
+    --surface-alt: #1B262C;
+    --ink:         #E6EEF1;
+    --ink-soft:    #C2D2D9;
+    --muted:       #8FA3AC;
+    --line:        #243138;
+    --line-soft:   #1D272D;
+    --accent:      #4EC6D2;
+    --accent-soft: #0F2E36;
+    --accent-dim:  #2E5C65;
+    --good:        #4FBF87;
+    --warn:        #DEA53E;
+    --bad:         #E8756A;
+    --shadow:      0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 var(--pad) 6rem; }
+
+  /* ---------- masthead ---------- */
+
+  header.masthead { padding: clamp(3rem, 9vw, 6rem) 0 2.5rem; }
+
+  .eyebrow {
+    font-family: var(--body);
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 1rem;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: clamp(2.5rem, 7vw, 4.1rem);
+    line-height: 1.04;
+    letter-spacing: -.018em;
+    text-wrap: balance;
+    margin: 0 0 1.1rem;
+  }
+
+  .standfirst {
+    font-family: var(--display);
+    font-size: clamp(1.12rem, 2.3vw, 1.4rem);
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 46ch;
+    margin: 0 0 2rem;
+  }
+
+  .synthetic {
+    display: flex;
+    gap: .85rem;
+    align-items: flex-start;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--warn);
+    background: var(--surface);
+    border-radius: 3px;
+    padding: .9rem 1.1rem;
+    font-size: .9rem;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: var(--measure);
+  }
+  .synthetic strong { color: var(--ink); font-weight: 600; }
+  .synthetic .mark {
+    font-family: var(--mono);
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .08em;
+    color: var(--warn);
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    padding: .1rem .35rem;
+    white-space: nowrap;
+    margin-top: .15rem;
+  }
+
+  /* ---------- sections ---------- */
+
+  section { padding-top: clamp(3rem, 7vw, 5rem); scroll-margin-top: 4rem; }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: clamp(1.7rem, 3.6vw, 2.35rem);
+    line-height: 1.15;
+    letter-spacing: -.012em;
+    text-wrap: balance;
+    margin: 0 0 .5rem;
+  }
+
+  h3 {
+    font-family: var(--body);
+    font-size: .95rem;
+    font-weight: 700;
+    letter-spacing: -.005em;
+    margin: 2.2rem 0 .6rem;
+  }
+
+  p { max-width: var(--measure); margin: 0 0 1.05rem; }
+  p.lede { color: var(--ink-soft); font-size: 1.03rem; margin-bottom: 1.8rem; }
+
+  a { color: var(--accent); text-underline-offset: 3px; }
+
+  .rule { height: 1px; background: var(--line); border: 0; margin: 0; }
+
+  /* ---------- figures ---------- */
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 1.8rem 0 2rem;
+  }
+  .stat { background: var(--surface); padding: 1.15rem 1.2rem 1.25rem; }
+  .stat .k {
+    font-family: var(--mono);
+    font-size: clamp(1.5rem, 3.4vw, 1.95rem);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.02em;
+    line-height: 1.1;
+    display: block;
+  }
+  .stat .l {
+    font-size: .78rem;
+    color: var(--muted);
+    line-height: 1.4;
+    margin-top: .4rem;
+    display: block;
+  }
+  .stat .k.pos { color: var(--good); }
+
+  figure { margin: 1.8rem 0 2.2rem; }
+  figcaption {
+    font-size: .82rem;
+    color: var(--muted);
+    line-height: 1.5;
+    margin-top: .9rem;
+    max-width: var(--measure);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1.4rem var(--pad) 1.6rem;
+    box-shadow: var(--shadow);
+  }
+
+  /* ---------- provider accuracy track ---------- */
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.2rem;
+    font-size: .78rem;
+    color: var(--muted);
+    margin-bottom: 1.4rem;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: .45rem; }
+  .swatch { width: 20px; height: 9px; border-radius: 2px; flex: none; }
+  .swatch.now  { background: var(--accent); }
+  .swatch.was  { background: var(--accent-dim); }
+
+  .tracks { display: grid; gap: .5rem; }
+  .row {
+    display: grid;
+    grid-template-columns: 8.5rem 1fr 8.2rem;
+    align-items: center;
+    gap: .9rem;
+  }
+  .row .name {
+    font-size: .87rem;
+    font-weight: 500;
+    text-align: right;
+    color: var(--ink-soft);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .track {
+    position: relative;
+    height: 20px;
+    background: var(--surface-alt);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .bar-was, .bar-now {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    border-radius: 2px;
+  }
+  .bar-was { background: var(--accent-dim); width: calc(var(--was) / 15 * 100%); }
+  .bar-now { background: var(--accent);     width: calc(var(--now) / 15 * 100%); }
+  .row .fig {
+    font-family: var(--mono);
+    font-size: .8rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .row .fig b { color: var(--ink); font-weight: 500; }
+  .row .fig .arrow { opacity: .5; padding: 0 .15rem; }
+
+  .axis {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: .68rem;
+    color: var(--muted);
+    margin-top: .5rem;
+    padding-left: 9.4rem;
+  }
+
+  @media (max-width: 620px) {
+    .row { grid-template-columns: 6.5rem 1fr; row-gap: .1rem; }
+    .row .fig { grid-column: 2; font-size: .74rem; }
+    .axis { padding-left: 7.4rem; }
+  }
+
+  /* ---------- break chart ---------- */
+
+  .weeks {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 4px;
+    align-items: end;
+    height: 190px;
+    padding-top: .5rem;
+  }
+  .wk { display: flex; flex-direction: column; justify-content: flex-end; height: 100%; gap: .4rem; }
+  .wk .col {
+    background: var(--accent-dim);
+    border-radius: 2px 2px 0 0;
+    height: calc(var(--v) / 22 * 100%);
+    min-height: 2px;
+  }
+  .wk.after .col { background: var(--bad); }
+  .wk .lab {
+    font-family: var(--mono);
+    font-size: .62rem;
+    color: var(--muted);
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .wk.after .lab { color: var(--bad); font-weight: 600; }
+  .divider-note {
+    font-size: .78rem;
+    color: var(--muted);
+    display: flex;
+    gap: .5rem;
+    margin-top: .8rem;
+  }
+
+  /* ---------- tables ---------- */
+
+  .scroll { overflow-x: auto; margin: 1.4rem 0 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: .84rem;
+    min-width: 560px;
+  }
+  caption {
+    text-align: left;
+    font-size: .78rem;
+    font-weight: 600;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-bottom: .7rem;
+  }
+  th, td { padding: .5rem .7rem; text-align: right; }
+  th:first-child, td:first-child { text-align: left; padding-left: 0; }
+  th:last-child, td:last-child { padding-right: 0; }
+  thead th {
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  tbody tr { border-bottom: 1px solid var(--line-soft); }
+  tbody tr:last-child { border-bottom: 0; }
+  tbody td { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  tbody td:first-child { font-family: var(--body); font-weight: 500; }
+  tr.best td { background: var(--accent-soft); }
+  tr.tot { border-top: 2px solid var(--line); }
+  tr.tot td { font-weight: 600; color: var(--ink); }
+  tr.tot td:first-child { font-weight: 700; }
+  .neg { color: var(--bad); }
+  .pos { color: var(--good); }
+  .dim { color: var(--muted); }
+
+  /* ---------- callouts ---------- */
+
+  .note {
+    border-left: 2px solid var(--accent);
+    padding: .2rem 0 .2rem 1.1rem;
+    margin: 1.6rem 0;
+    max-width: var(--measure);
+  }
+  .note p:last-child { margin-bottom: 0; }
+  .note .h {
+    font-size: .74rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: .35rem;
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: .87em;
+    background: var(--surface-alt);
+    padding: .1em .35em;
+    border-radius: 2px;
+  }
+
+  ul { max-width: var(--measure); padding-left: 1.15rem; margin: 0 0 1.05rem; }
+  li { margin-bottom: .5rem; }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.6rem;
+    border-top: 1px solid var(--line);
+    font-size: .82rem;
+    color: var(--muted);
+    max-width: var(--measure);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .bar-now, .bar-was, .wk .col { transition: width .5s ease, height .5s ease; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">UK home insurance &middot; market pricing</p>
+    <h1>How close can you get to twelve insurers&rsquo; prices?</h1>
+    <p class="standfirst">A model is trained on nine weeks of quotes, then asked to price three weeks it has never seen. This is what it got right, what it got wrong, and why.</p>
+
+    <div class="synthetic">
+      <span class="mark">SYNTHETIC</span>
+      <div><strong>Every figure here comes from a synthetic sample extract, not real market data.</strong> The generator produces genuine multiplicative rating structure, minimum-premium floors, per-brand declines and tactical price drift, which is what makes the measurements meaningful &mdash; but the brand names are labels on invented data. Nothing here describes any real insurer&rsquo;s pricing.</div>
+    </div>
+  </header>
+
+  <hr class="rule">
+
+  <!-- ============ HEADLINE ============ -->
+  <section id="headline">
+    <p class="eyebrow">The headline</p>
+    <h2>Typically within about 4% of the actual premium</h2>
+    <p class="lede">Across 7,353 quotes in three held-out weeks, the median prediction lands 4.1% away from what the insurer actually charged. The average miss is larger, at 6.0%, because a minority of quotes are badly wrong and pull the mean up.</p>
+
+    <div class="stats">
+      <div class="stat"><span class="k">4.1<span class="dim">%</span></span><span class="l">Median absolute error &mdash; the typical quote</span></div>
+      <div class="stat"><span class="k">6.0<span class="dim">%</span></span><span class="l">Mean absolute error &mdash; pulled up by the tail</span></div>
+      <div class="stat"><span class="k">82<span class="dim">%</span></span><span class="l">Of quotes land within 10% of the real price</span></div>
+      <div class="stat"><span class="k">0.6<span class="dim">%</span></span><span class="l">Overall bias &mdash; no systematic over- or under-pricing</span></div>
+    </div>
+
+    <p>Those are the figures for the system as it would actually run, re-reading the panel each week before pricing the next one. Held fully blind for all three weeks instead &mdash; no refresh at all &mdash; it degrades to 4.5% median, 7.0% mean and 77% within 10%. Both numbers appear throughout this page, and the difference between them is the subject of <a href="#churchill">the section on Churchill</a>.</p>
+
+    <div class="note">
+      <div class="h">Read this before the numbers</div>
+      <p>&ldquo;Accurate&rdquo; has two meanings here and they do not move together. Getting the <em>premium</em> right is what this page measures. Getting the <em>cheapest five in the right order</em> is a different task, and the model identifies the actual cheapest provider only 58% of the time even while sitting within 4% on price &mdash; because when a dozen insurers quote within a few pounds of each other, a 2% error reshuffles the ranking.</p>
+    </div>
+  </section>
+
+  <!-- ============ PROVIDERS ============ -->
+  <section id="providers">
+    <p class="eyebrow">Provider by provider</p>
+    <h2>Accuracy is not evenly spread</h2>
+    <p class="lede">Five providers are predicted almost exactly. One is not. The bar is the average absolute error; the darker portion is what remains once the model is allowed to see each week before pricing the next.</p>
+
+    <figure class="card">
+      <div class="legend">
+        <span><i class="swatch now"></i> With weekly refresh</span>
+        <span><i class="swatch was"></i> Recovered by the refresh</span>
+      </div>
+
+      <div class="tracks">
+        <div class="row"><span class="name">Admiral</span><span class="track"><i class="bar-was" style="--was:3.11"></i><i class="bar-now" style="--now:3.16"></i></span><span class="fig"><b>3.2%</b><span class="arrow">&larr;</span>3.1%</span></div>
+        <div class="row"><span class="name">Policy Expert</span><span class="track"><i class="bar-was" style="--was:3.30"></i><i class="bar-now" style="--now:3.21"></i></span><span class="fig"><b>3.2%</b><span class="arrow">&larr;</span>3.3%</span></div>
+        <div class="row"><span class="name">Homeprotect</span><span class="track"><i class="bar-was" style="--was:3.47"></i><i class="bar-now" style="--now:3.45"></i></span><span class="fig"><b>3.5%</b><span class="arrow">&larr;</span>3.5%</span></div>
+        <div class="row"><span class="name">AXA</span><span class="track"><i class="bar-was" style="--was:4.05"></i><i class="bar-now" style="--now:4.02"></i></span><span class="fig"><b>4.0%</b><span class="arrow">&larr;</span>4.1%</span></div>
+        <div class="row"><span class="name">Aviva</span><span class="track"><i class="bar-was" style="--was:4.56"></i><i class="bar-now" style="--now:3.86"></i></span><span class="fig"><b>3.9%</b><span class="arrow">&larr;</span>4.6%</span></div>
+        <div class="row"><span class="name">Esure</span><span class="track"><i class="bar-was" style="--was:4.62"></i><i class="bar-now" style="--now:4.59"></i></span><span class="fig"><b>4.6%</b><span class="arrow">&larr;</span>4.6%</span></div>
+        <div class="row"><span class="name">NFU Mutual</span><span class="track"><i class="bar-was" style="--was:6.37"></i><i class="bar-now" style="--now:5.32"></i></span><span class="fig"><b>5.3%</b><span class="arrow">&larr;</span>6.4%</span></div>
+        <div class="row"><span class="name">Saga</span><span class="track"><i class="bar-was" style="--was:7.02"></i><i class="bar-now" style="--now:5.87"></i></span><span class="fig"><b>5.9%</b><span class="arrow">&larr;</span>7.0%</span></div>
+        <div class="row"><span class="name">Direct Line</span><span class="track"><i class="bar-was" style="--was:7.09"></i><i class="bar-now" style="--now:6.77"></i></span><span class="fig"><b>6.8%</b><span class="arrow">&larr;</span>7.1%</span></div>
+        <div class="row"><span class="name">Ageas</span><span class="track"><i class="bar-was" style="--was:7.23"></i><i class="bar-now" style="--now:5.95"></i></span><span class="fig"><b>6.0%</b><span class="arrow">&larr;</span>7.2%</span></div>
+        <div class="row"><span class="name">LV=</span><span class="track"><i class="bar-was" style="--was:8.26"></i><i class="bar-now" style="--now:7.10"></i></span><span class="fig"><b>7.1%</b><span class="arrow">&larr;</span>8.3%</span></div>
+        <div class="row"><span class="name">Churchill</span><span class="track"><i class="bar-was" style="--was:14.24"></i><i class="bar-now" style="--now:10.72"></i></span><span class="fig"><b>10.7%</b><span class="arrow">&larr;</span>14.2%</span></div>
+      </div>
+
+      <div class="axis"><span>0%</span><span>5%</span><span>10%</span><span>15%</span></div>
+      <figcaption>Mean absolute percentage error per provider on the three held-out weeks. Providers are ordered by how hard they are to predict.</figcaption>
+    </figure>
+
+    <h3>Level error versus scatter</h3>
+    <p>Two very different failures hide inside a single accuracy number, and they call for different fixes. <strong>Bias</strong> is the model having a provider&rsquo;s whole price level wrong &mdash; a correctable, systematic offset. <strong>Spread</strong> is what is left after that offset is removed, and it is the genuinely hard part.</p>
+
+    <div class="scroll">
+      <table>
+        <caption>Held-out weeks 9&ndash;11, batch evaluation</caption>
+        <thead>
+          <tr><th>Provider</th><th>Quotes</th><th>Mean premium</th><th>Bias</th><th>Spread (SD)</th><th>Mean abs. error</th><th>Within 10%</th><th>Avg miss</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Admiral</td><td>395</td><td>&pound;208</td><td class="dim">&minus;0.5%</td><td>5.2</td><td>3.11%</td><td class="pos">94%</td><td>&pound;6</td></tr>
+          <tr><td>Policy Expert</td><td>421</td><td>&pound;203</td><td class="dim">&minus;0.5%</td><td>6.9</td><td>3.30%</td><td class="pos">95%</td><td>&pound;5</td></tr>
+          <tr><td>Homeprotect</td><td>352</td><td>&pound;422</td><td class="dim">+1.3%</td><td>6.5</td><td>3.47%</td><td class="pos">95%</td><td>&pound;18</td></tr>
+          <tr><td>AXA</td><td>724</td><td>&pound;214</td><td class="dim">+0.7%</td><td>7.2</td><td>4.05%</td><td class="pos">90%</td><td>&pound;8</td></tr>
+          <tr><td>Aviva</td><td>750</td><td>&pound;272</td><td>+3.3%</td><td>5.7</td><td>4.56%</td><td class="pos">93%</td><td>&pound;13</td></tr>
+          <tr><td>Esure</td><td>272</td><td>&pound;211</td><td class="dim">&minus;0.4%</td><td>8.1</td><td>4.62%</td><td class="pos">89%</td><td>&pound;9</td></tr>
+          <tr><td>NFU Mutual</td><td>345</td><td>&pound;334</td><td>+5.9%</td><td>7.3</td><td>6.37%</td><td>83%</td><td>&pound;25</td></tr>
+          <tr><td>Saga</td><td>721</td><td>&pound;386</td><td>&minus;5.8%</td><td>9.9</td><td>7.02%</td><td>82%</td><td>&pound;32</td></tr>
+          <tr><td>Direct Line</td><td>1,063</td><td>&pound;475</td><td>&minus;4.8%</td><td>9.6</td><td>7.09%</td><td>79%</td><td>&pound;36</td></tr>
+          <tr><td>Ageas</td><td>500</td><td>&pound;273</td><td>+6.8%</td><td>7.7</td><td>7.23%</td><td>78%</td><td>&pound;23</td></tr>
+          <tr><td>LV=</td><td>726</td><td>&pound;300</td><td>&minus;4.0%</td><td>9.4</td><td>8.26%</td><td class="neg">58%</td><td>&pound;32</td></tr>
+          <tr><td>Churchill</td><td>1,084</td><td>&pound;363</td><td class="neg">&minus;14.8%</td><td>10.5</td><td>14.24%</td><td class="neg">36%</td><td>&pound;64</td></tr>
+          <tr class="tot"><td>All</td><td>7,353</td><td>&pound;323</td><td>&minus;0.6%</td><td>10.5</td><td>6.97%</td><td>77%</td><td>&pound;27</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption>Bias is the median signed error: negative means the model quotes below what the provider charged. Spread is the standard deviation of that signed error, so it is the scatter that would remain if the bias were corrected. Admiral, Policy Expert, Esure, Homeprotect and AXA sit within &plusmn;1.3% on bias, so their error is essentially all scatter &mdash; the model is genuinely predicting their price, not just its neighbourhood.</figcaption>
+  </section>
+
+  <!-- ============ THE BREAK ============ -->
+  <section id="churchill">
+    <p class="eyebrow">Where it breaks</p>
+    <h2>Churchill did something the training data could not have shown</h2>
+    <p class="lede">Churchill is the worst-predicted provider by a wide margin, at nearly 15% average error against a field where the next worst is 8%. It is worth understanding exactly why, because the obvious explanations are all wrong.</p>
+
+    <figure class="card">
+      <div class="weeks">
+        <div class="wk"><span class="col" style="--v:0.05"></span><span class="lab">0</span></div>
+        <div class="wk"><span class="col" style="--v:0.14"></span><span class="lab">1</span></div>
+        <div class="wk"><span class="col" style="--v:0.11"></span><span class="lab">2</span></div>
+        <div class="wk"><span class="col" style="--v:0.12"></span><span class="lab">3</span></div>
+        <div class="wk"><span class="col" style="--v:0.00"></span><span class="lab">4</span></div>
+        <div class="wk"><span class="col" style="--v:0.06"></span><span class="lab">5</span></div>
+        <div class="wk"><span class="col" style="--v:0.01"></span><span class="lab">6</span></div>
+        <div class="wk"><span class="col" style="--v:0.11"></span><span class="lab">7</span></div>
+        <div class="wk"><span class="col" style="--v:0.06"></span><span class="lab">8</span></div>
+        <div class="wk after"><span class="col" style="--v:8.57"></span><span class="lab">9</span></div>
+        <div class="wk after"><span class="col" style="--v:17.83"></span><span class="lab">10</span></div>
+        <div class="wk after"><span class="col" style="--v:21.75"></span><span class="lab">11</span></div>
+      </div>
+      <div class="divider-note"><span>Weeks 0&ndash;8 trained &middot; weeks 9&ndash;11 held out</span></div>
+      <figcaption>How far Churchill&rsquo;s actual prices sat above the model&rsquo;s, week by week. The model tracks Churchill to within 0.15% in <em>every single training week</em>, including the last one &mdash; then Churchill repriced upward by roughly 8&ndash;9% per week the moment the data ran out.</figcaption>
+    </figure>
+
+    <p>This rules out the comfortable explanations. It is not that Churchill is a hard risk mix, or that the model under-fits it, or that the boundary week was averaged away &mdash; the fit at week 8 is essentially perfect. It is a <strong>structural break</strong>: Churchill changed its prices after the training window closed, and its fitted trend over weeks 0&ndash;8 pointed the other way, at &minus;1.5% per week.</p>
+
+    <div class="note">
+      <div class="h">What this means for any fix</div>
+      <p>Weeks 0&ndash;8 contain no information about a week-9 break. Any change that improves Churchill&rsquo;s holdout number using only that data is not a fix, it is fitting the answer. Two earlier attempts to extrapolate harder both made Churchill <em>worse</em> &mdash; the second pushed its error from 14.6% to 15.9% &mdash; precisely because they projected a downward trend into a market that was moving up.</p>
+    </div>
+
+    <h3>What is actually fixable: the operating assumption</h3>
+    <p>The batch test withholds all three weeks at once. That is the right test of pure extrapolation and the wrong model of how the capability runs: the panel is re-collected every week, so week 9&rsquo;s outturn is in hand before week 10 is priced. Feeding that back in is not cheating, it is the job.</p>
+    <p>The model now supports exactly that, and only that &mdash; it re-reads each provider&rsquo;s price level from the newly observed week and carries it forward. The point model, the shape of every curve and every interaction are left untouched.</p>
+
+    <div class="scroll">
+      <table>
+        <caption>Churchill, week by week</caption>
+        <thead>
+          <tr><th>Holdout week</th><th>Bias, blind</th><th>Bias, weekly refresh</th><th>Error, blind</th><th>Error, refresh</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Week 9</td><td class="neg">&minus;9.5%</td><td class="neg">&minus;9.5%</td><td>8.51%</td><td>8.51%</td></tr>
+          <tr><td>Week 10</td><td class="neg">&minus;19.3%</td><td>&minus;11.6%</td><td>16.20%</td><td>11.93%</td></tr>
+          <tr><td>Week 11</td><td class="neg">&minus;23.3%</td><td class="dim">&minus;6.0%</td><td>17.99%</td><td>11.71%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption>Week 9 is identical under both regimes by construction &mdash; nothing has been observed yet, so there is nothing to correct. Every gain appears at weeks 10 and 11, which is the evidence that the mechanism is doing what it claims rather than quietly leaking the answer. Churchill&rsquo;s residual error never reaches zero because it is still climbing 8&ndash;9% a week and the correction is always one week behind.</figcaption>
+
+    <div class="stats">
+      <div class="stat"><span class="k">6.97 <span class="dim">&rarr;</span> <span class="pos">5.97</span></span><span class="l">Mean absolute error, all providers (%)</span></div>
+      <div class="stat"><span class="k">14.2 <span class="dim">&rarr;</span> <span class="pos">10.7</span></span><span class="l">Churchill mean absolute error (%)</span></div>
+      <div class="stat"><span class="k">77 <span class="dim">&rarr;</span> <span class="pos">82</span></span><span class="l">Quotes within 10% of actual (%)</span></div>
+      <div class="stat"><span class="k">110 <span class="dim">&rarr;</span> <span class="pos">84</span></span><span class="l">Variance of percentage error</span></div>
+    </div>
+  </section>
+
+  <!-- ============ HOW ============ -->
+  <section id="how">
+    <p class="eyebrow">How the number is produced</p>
+    <h2>Eleven approaches, scored only on data they never saw</h2>
+    <p class="lede">Nothing here is scored in-sample and no split is random. Two holdouts ask different questions, and the answers disagree &mdash; which is the point of running both.</p>
+
+    <ul>
+      <li><strong>Temporal holdout</strong> &mdash; train on weeks 0&ndash;8, predict weeks 9&ndash;11. Asks: can you price next month?</li>
+      <li><strong>Spatial holdout</strong> &mdash; hold out five whole postcode areas, so no test postcode appears in training. Asks: can you price somewhere you have never quoted?</li>
+    </ul>
+
+    <div class="scroll">
+      <table>
+        <caption>Leaderboard &mdash; median absolute error, %</caption>
+        <thead>
+          <tr><th>Approach</th><th>Temporal</th><th>Spatial</th><th>Within 10% (temporal)</th><th>Fit time</th></tr>
+        </thead>
+        <tbody>
+          <tr class="best"><td>Boosted trees per brand, drift-corrected</td><td>4.48</td><td>11.86</td><td>77%</td><td>53s</td></tr>
+          <tr><td>Boosted trees per brand</td><td>4.60</td><td>11.86</td><td>76%</td><td>10s</td></tr>
+          <tr><td>Random forest</td><td>5.30</td><td>12.61</td><td>69%</td><td>21s</td></tr>
+          <tr><td>Boosted trees, pooled</td><td>5.63</td><td>10.22</td><td>73%</td><td>3s</td></tr>
+          <tr><td>CatBoost, pooled</td><td>6.29</td><td class="pos">8.86</td><td>71%</td><td>7s</td></tr>
+          <tr><td>Explainable boosting machine, per brand</td><td>6.72</td><td>11.56</td><td>69%</td><td>840s</td></tr>
+          <tr><td>Explainable boosting machine, pooled</td><td>9.91</td><td>13.19</td><td>50%</td><td>157s</td></tr>
+          <tr><td>Ridge on log premium</td><td>13.47</td><td>11.88</td><td>37%</td><td>&lt;1s</td></tr>
+          <tr><td>Per-brand geometric mean <span class="dim">(baseline)</span></td><td>42.31</td><td>39.51</td><td>11%</td><td>&lt;1s</td></tr>
+          <tr><td>Market geometric mean <span class="dim">(baseline)</span></td><td>47.33</td><td>42.81</td><td>14%</td><td>&lt;1s</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption>The two baselines exist to make the rest legible: quoting every risk at the market average is 47% out, so a real rating model has to beat that before it has done anything at all. Note that the winner flips between splits &mdash; CatBoost is best at unseen geography and mid-table at unseen weeks.</figcaption>
+
+    <h3>The interpretability question, measured</h3>
+    <p>An explainable boosting machine is additive: it produces a readable table of one curve per rating factor, which is what an actuary can actually argue with. Unrestricted boosted trees can represent caps, collars and three-way interactions that an additive model structurally cannot. The gap between them is a measurement of how much non-additive structure the market really contains.</p>
+    <div class="stats">
+      <div class="stat"><span class="k">+2.13</span><span class="l">Temporal split: points of error the additive model gives up</span></div>
+      <div class="stat"><span class="k">&minus;0.30</span><span class="l">Spatial split: the additive model is marginally ahead</span></div>
+    </div>
+    <p>The sign flips. On unseen weeks there is real non-additive structure worth 2 points; on unseen geography the interpretable model costs nothing and is slightly better. That is a finding about the market, not a verdict on either model &mdash; and it means the choice between them is a decision about which risk you care about, not a race.</p>
+  </section>
+
+  <!-- ============ CAVEATS ============ -->
+  <section id="caveats">
+    <p class="eyebrow">What to distrust</p>
+    <h2>Five things this page does not prove</h2>
+
+    <h3>The data is synthetic</h3>
+    <p>Everything above is measured on a generated sample extract. The generator was built to reproduce the structural features that make this problem hard &mdash; multiplicative rating, minimum-premium floors, brand-specific declines, tactical drift &mdash; so the measurements are meaningful as engineering. They are not observations about any real insurer.</p>
+
+    <h3>Three weeks is a short horizon</h3>
+    <p>The model is asked to price three weeks ahead. Nothing here says anything about three months. The forward drift correction is deliberately capped at a 13-week horizon and its strength was chosen on held-out weeks, which selected only a quarter of the fitted trend &mdash; the level series behaves like a random walk, and for a random walk the best forecast of next week is this week.</p>
+
+    <h3>The mean premium is not what is optimised</h3>
+    <p>The model is fitted on log premium, so exponentiating gives a median-unbiased price, not a mean-unbiased one. That is why the pooled median error is &minus;0.6% while the pooled mean error is &minus;2.2%. Anything that needs expected spend rather than a typical price &mdash; reserving, budgeting &mdash; needs a smearing correction that is not applied here.</p>
+
+    <h3>Ranking accuracy is much weaker than price accuracy</h3>
+    <p>Sitting within 4% of every provider still only identifies the actual cheapest one 58% of the time, and reproduces the true cheapest-five list about 44% of the time. If the deliverable is a cheapest-N table rather than a price, these are the numbers that matter and they are far less flattering.</p>
+
+    <h3>The index basket is a decision, not a measurement</h3>
+    <p>The weekly index runs on 46 risks present in every week, derived because no basket was declared. Which risks constitute your index is an editorial choice that changes the answer, and a vendor extract cannot make it for you.</p>
+  </section>
+
+  <footer>
+    <p>Held-out evaluation on a synthetic sample extract: 46,800 quotes across 393 risks and twelve brands, 29,612 of them quoted, premiums &pound;95&ndash;&pound;2,728. Simulated top-5 market price &pound;316 on a mean panel of 12 providers, of which 7.8 quote. Generated by <code>scripts/run_poc.py</code>; every figure is reproducible from the repository.</p>
+  </footer>
+
+</div>
