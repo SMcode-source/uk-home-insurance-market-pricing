@@ -1,0 +1,96 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor and the version actually developed against. The floor is
+        # not decoration: `requires-python = ">=3.11"` is a promise, and an
+        # untested floor is a promise nobody checked.
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[models,dev]"
+
+      # The registry reports approaches whose library is missing as *skipped*
+      # rather than dropping them, which means a broken install produces a
+      # green run over a shrunken lineup. Fail loudly instead.
+      - name: Every approach must be available
+        run: |
+          python - <<'PY'
+          from mktpricing.models import approaches as _  # noqa: F401  (registers)
+          from mktpricing.models.base import all_approaches, unavailable_approaches
+          missing = unavailable_approaches()
+          print(f"{len(all_approaches())} registered")
+          if missing:
+              for name, why in missing.items():
+                  print(f"  MISSING {name}: {why}")
+              raise SystemExit("optional model libraries did not install")
+          PY
+
+      - name: Tests
+        run: pytest -q --durations=10
+
+      # A smoke run over the whole pipeline. `--quick` keeps it to a small
+      # synthetic market and `--only` to the fast approaches; the point is that
+      # stages 1-5 still connect, not that the numbers are good. Stage 3b is
+      # included deliberately -- it asserts the rolling pass is not leaking the
+      # holdout, and that assertion is worth running on every push.
+      - name: End-to-end smoke run
+        run: |
+          python scripts/run_poc.py --quick --out "${{ runner.temp }}/poc" \
+            --only global_geomean,ridge_log,gbm_per_brand,gbm_per_brand_trend
+
+      - name: Rolling evaluation produced its outputs
+        run: |
+          python - <<'PY'
+          import os, pathlib, sys
+          import pandas as pd
+          out = pathlib.Path(os.environ["RUNNER_TEMP"]) / "poc"
+          for f in ("leaderboard.csv", "rolling.csv", "rolling_per_week.csv"):
+              if not (out / f).exists():
+                  sys.exit(f"{f} was not written")
+          roll = pd.read_csv(out / "rolling.csv")
+          if set(roll.regime) != {"blind", "rolling"}:
+              sys.exit(f"expected both regimes, got {sorted(set(roll.regime))}")
+          print(roll.to_string(index=False))
+          PY
+
+      # ui/index.html is authored as an Artifact fragment and the public site
+      # serves a wrapped copy. Rebuild here so a change to either the source or
+      # the generator fails loudly rather than leaving the published page stale.
+      - name: Public page builds from its source
+        run: |
+          python ui/build_public.py "${{ runner.temp }}/index.html"
+          python - <<'PY'
+          import os, pathlib, sys
+          built = (pathlib.Path(os.environ["RUNNER_TEMP"]) / "index.html").read_text(encoding="utf-8")
+          src = pathlib.Path("ui/index.html").read_text(encoding="utf-8")
+          cut = src.index("<style>")
+          for label, part in (("head", src[:cut]), ("body", src[cut:])):
+              if part not in built:
+                  sys.exit(f"{label} half of ui/index.html is missing from the build output")
+          if not built.startswith("<!doctype html>"):
+              sys.exit("build output is not a standalone document")
+          print(f"public page builds cleanly, {len(built.encode()) / 1024:.1f} KB")
+          PY

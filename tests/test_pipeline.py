@@ -450,3 +450,76 @@ def test_top_k_order_is_unchanged_when_everyone_quotes():
         }
     )
     assert list(top_k_table(panel, "R1", week=0, k=3).brand) == ["B", "C", "A"]
+
+
+# -- rolling (blind vs weekly refresh) --------------------------------------
+
+
+def _rolling(data, **kw):
+    from mktpricing.evaluate.compare import rolling_comparison
+
+    risks, quotes, _ = data
+    df = build_matrix(quotes, risks)
+    return rolling_comparison(
+        df, holdout_weeks=kw.pop("holdout_weeks", 3),
+        only=["gbm_per_brand_trend"], verbose=False, **kw
+    )
+
+
+def test_rolling_scores_both_regimes_on_the_same_rows():
+    pytest.importorskip("lightgbm")
+    from mktpricing.collect.synthetic import generate
+
+    risks, quotes, _ = generate(n_risks=120, n_weeks=6, seed=3)
+    summary, per_brand, per_week, preds = _rolling((risks, quotes, None))
+    assert set(summary.regime) == {"blind", "rolling"}
+    # both regimes must score exactly the same rows, or the comparison is
+    # between two different test sets rather than two ways of predicting one
+    assert summary.n.nunique() == 1
+
+
+def test_the_first_holdout_week_is_identical_under_both_regimes():
+    """The central guard against leaking the holdout.
+
+    Nothing has been observed when the first holdout week is priced, so there
+    is nothing to correct and the two regimes must agree exactly. If they ever
+    disagree, the rolling pass absorbed data before scoring it and every figure
+    it produces is flattering and wrong.
+    """
+    pytest.importorskip("lightgbm")
+    from mktpricing.collect.synthetic import generate
+    from mktpricing.evaluate.compare import first_holdout_week_is_identical
+
+    risks, quotes, _ = generate(n_risks=120, n_weeks=6, seed=3)
+    _, _, per_week, _ = _rolling((risks, quotes, None))
+
+    first = per_week.week.min()
+    got = per_week[per_week.week == first].set_index("regime")
+    assert got.loc["blind"].mape == pytest.approx(got.loc["rolling"].mape, abs=0)
+    assert first_holdout_week_is_identical(per_week)
+
+
+def test_the_leak_guard_actually_fires():
+    """A guard nobody has seen fail is a guard nobody has tested."""
+    import pandas as pd
+    from mktpricing.evaluate.compare import first_holdout_week_is_identical
+
+    leaking = pd.DataFrame({
+        "approach": ["a", "a"], "regime": ["blind", "rolling"],
+        "week": [9, 9], "mape": [5.0, 4.2],
+    })
+    assert not first_holdout_week_is_identical(leaking)
+
+
+def test_rolling_skips_approaches_that_cannot_recalibrate():
+    """gbm_per_brand has no `recalibrate`; running it in both regimes would be
+    the same computation twice, reported as if it were a comparison."""
+    from mktpricing.collect.synthetic import generate
+    from mktpricing.evaluate.compare import rolling_comparison
+
+    risks, quotes, _ = generate(n_risks=60, n_weeks=5, seed=1)
+    summary, *_ = rolling_comparison(
+        build_matrix(quotes, risks), holdout_weeks=2,
+        only=["gbm_per_brand"], verbose=False,
+    )
+    assert summary.empty

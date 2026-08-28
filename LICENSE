@@ -1,0 +1,42 @@
+Copyright (c) 2026 Saptarshi Manna. All rights reserved.
+
+This software and its documentation are proprietary and confidential. No
+licence, express or implied, is granted to use, copy, modify, merge, publish,
+distribute, sublicense or sell any part of this work without the prior written
+permission of the copyright holder.
+
+This is the reversible default. A permissive licence such as MIT or Apache-2.0
+can be granted later at any time; it cannot meaningfully be withdrawn once
+published, because every copy taken under it keeps its rights. If this project
+is ever intended to be open source, replace this file deliberately rather than
+by omission.
+
+
+THIRD-PARTY COMPONENTS
+
+This repository depends on separately licensed open-source packages -- numpy,
+pandas, pyarrow, pydantic, PyYAML, scikit-learn, interpret, LightGBM, CatBoost
+and pytest among them. They are governed by their own licences, not by this
+one. Nothing here restricts your rights in those packages.
+
+
+DATA IS NOT COVERED BY THIS LICENCE
+
+No quote or risk data is contained in this repository, and the .gitignore is
+written to keep it that way. Any data you collect or licence is governed by its
+own terms, which are typically more restrictive than this file:
+
+  - Vendor extracts (Consumer Intelligence, Defaqto and similar) arrive under a
+    licence that usually restricts redistribution and derived works. Read it
+    before publishing anything built from one, including accuracy tables broken
+    down by brand.
+
+  - Quotes collected from comparison sites are subject to those sites' terms of
+    use, and the results pages may attract UK database right independently of
+    any individual price.
+
+  - Any personal data collected from someone other than yourself is subject to
+    UK GDPR and needs a lawful basis.
+
+None of the above is legal advice. Take proper counsel before any commercial
+use of this work or of data gathered with it.

@@ -132,6 +132,139 @@ def run_comparison(
     return leaderboard, predictions, skipped
 
 
+def rolling_comparison(
+    df: pd.DataFrame,
+    *,
+    holdout_weeks: int = 3,
+    include_brand: bool = True,
+    only=None,
+    verbose: bool = True,
+):
+    """Score the same fitted model blind and under weekly refresh.
+
+    `run_comparison` withholds every holdout week at once. That is the right
+    test of pure extrapolation and the wrong model of operation: the panel is
+    re-collected weekly, so week 9's outturn is in hand before week 10 is
+    priced. Reporting only the blind number answers a question nobody asks.
+
+    One point model is fitted once, on the training window, and used for both
+    regimes. The only difference is that the rolling pass calls `recalibrate`
+    on each holdout week after scoring it, so the level -- and only the level --
+    reflects what has actually been observed by then.
+
+    The first holdout week is necessarily identical under both regimes, because
+    nothing has been observed yet. That identity is the check that this is not
+    quietly scoring on the holdout: if week one ever differs, the information is
+    leaking. `run_poc.py` asserts it rather than trusting it.
+
+    Only approaches exposing `recalibrate` take part; for anything else the two
+    regimes are the same computation twice.
+
+    Returns (summary, per_brand, per_week, predictions).
+    """
+    registry = {
+        n: c for n, c in available_approaches().items()
+        if hasattr(c, "recalibrate")
+    }
+    if only:
+        wanted = {
+            n.strip() for spec in only for n in str(spec).split(",") if n.strip()
+        }
+        registry = {n: c for n, c in registry.items() if n in wanted}
+    if not registry:
+        if verbose:
+            print("  no approach supports recalibration; nothing to compare")
+        empty = pd.DataFrame()
+        return empty, empty, empty, empty
+
+    train, test = temporal_split(df, holdout_weeks=holdout_weeks)
+    Xtr, ytr = design_matrix(train, include_brand=include_brand)
+    gtr = train["brand"].to_numpy()
+    weeks = sorted(test.week.unique())
+
+    def _prep(frame):
+        X, y = design_matrix(frame, include_brand=include_brand)
+        return align_columns(X, Xtr), y, frame["brand"].to_numpy()
+
+    preds = []
+    for name, cls in registry.items():
+        t0 = time.perf_counter()
+        model = cls().fit(Xtr, ytr, groups=gtr)
+
+        # Blind first: `recalibrate` mutates the model, so the order is not
+        # cosmetic. Scoring blind after rolling would score a model that has
+        # already seen the holdout.
+        Xte, yte, gte = _prep(test)
+        preds.append(pd.DataFrame({
+            "approach": name, "regime": "blind",
+            "brand": gte, "week": test["week"].to_numpy(),
+            "y_true": yte,
+            "y_pred": np.asarray(model.predict(Xte, groups=gte), dtype=float),
+        }))
+
+        for w in weeks:
+            cur = test[test.week == w]
+            Xc, yc, gc = _prep(cur)
+            preds.append(pd.DataFrame({
+                "approach": name, "regime": "rolling",
+                "brand": gc, "week": cur["week"].to_numpy(),
+                "y_true": yc,
+                "y_pred": np.asarray(model.predict(Xc, groups=gc), dtype=float),
+            }))
+            model.recalibrate(Xc, yc, groups=gc)
+
+        if verbose:
+            print(f"    {name:22} fitted once, {len(weeks)} weekly updates "
+                  f"({time.perf_counter() - t0:.1f}s)")
+
+    predictions = pd.concat(preds, ignore_index=True)
+    predictions["ape"] = (
+        np.abs(np.exp(predictions.y_pred) - np.exp(predictions.y_true))
+        / np.exp(predictions.y_true) * 100.0
+    )
+    predictions["pe"] = (
+        (np.exp(predictions.y_pred) - np.exp(predictions.y_true))
+        / np.exp(predictions.y_true) * 100.0
+    )
+
+    def _agg(g):
+        return pd.Series({
+            "n": len(g),
+            "mape": g.ape.mean(),
+            "mdape": g.ape.median(),
+            "bias": g.pe.median(),
+            "var_pe": g.pe.var(ddof=1),
+            "within_10pct": (g.ape <= 10).mean() * 100.0,
+        })
+
+    keys = ["approach", "regime"]
+    summary = predictions.groupby(keys, observed=True).apply(
+        _agg, include_groups=False).reset_index()
+    per_brand = predictions.groupby(keys + ["brand"], observed=True).apply(
+        _agg, include_groups=False).reset_index()
+    per_week = predictions.groupby(keys + ["week"], observed=True).apply(
+        _agg, include_groups=False).reset_index()
+    return summary, per_brand, per_week, predictions
+
+
+def first_holdout_week_is_identical(per_week: pd.DataFrame, tol: float = 1e-9) -> bool:
+    """Did the two regimes agree on the first holdout week?
+
+    They must: nothing has been observed at that point, so there is nothing to
+    correct. A difference means the rolling pass saw data it should not have.
+    """
+    if per_week.empty:
+        return True
+    first = per_week.week.min()
+    row = per_week[per_week.week == first]
+    for _, g in row.groupby("approach", observed=True):
+        if g.regime.nunique() < 2:
+            continue
+        if g.mape.max() - g.mape.min() > tol:
+            return False
+    return True
+
+
 def format_leaderboard(leaderboard: pd.DataFrame, k: int = 5) -> pd.DataFrame:
     """Tidy view, sorted by the metric that matters for a top-k product."""
     if leaderboard.empty:

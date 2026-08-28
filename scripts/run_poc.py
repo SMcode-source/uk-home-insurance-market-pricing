@@ -8,7 +8,7 @@ Does five things in order:
 
   1. loads or generates quote data
   2. compares every available modelling approach on temporal + spatial splits
-  3. reports the EBM-vs-GBM additivity gap
+  3. reports the EBM-vs-GBM additivity gap, then blind vs weekly refresh
   4. fits the two-part model and simulates the cheapest-5 market price
   5. builds the weekly index from the fixed basket
 
@@ -29,7 +29,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mktpricing.collect.synthetic import generate  # noqa: E402
 from mktpricing.evaluate.compare import (  # noqa: E402
-    additivity_gap, format_leaderboard, run_comparison,
+    additivity_gap, first_holdout_week_is_identical, format_leaderboard,
+    rolling_comparison, run_comparison,
 )
 from mktpricing.evaluate.metrics import per_brand_metrics  # noqa: E402
 from mktpricing.features.build import align_columns, build_matrix, design_matrix  # noqa: E402
@@ -123,6 +124,43 @@ def main() -> int:
         print("  model cannot represent: caps, collars, 3-way terms, an")
         print("  optimisation layer. Near zero = a clean multiplicative table,")
         print("  and the interpretable model costs you nothing.")
+
+    # -- 3b. blind vs weekly refresh ---------------------------------------
+    _rule("3b. BLIND VS WEEKLY REFRESH  (the operating mode, not just the test)")
+    roll, roll_brand, roll_week, _ = rolling_comparison(
+        df, holdout_weeks=args.weeks_holdout, only=args.only, verbose=True,
+    )
+    if roll.empty:
+        print("  no approach in this run supports recalibration.")
+    else:
+        print()
+        print(roll.round(2).to_string(index=False))
+        roll.to_csv(args.out / "rolling.csv", index=False)
+        roll_brand.to_csv(args.out / "rolling_per_brand.csv", index=False)
+        roll_week.to_csv(args.out / "rolling_per_week.csv", index=False)
+
+        # The first holdout week has nothing observed behind it, so the two
+        # regimes must agree exactly. If they ever stop agreeing, the rolling
+        # pass is scoring on data it already absorbed -- which would make every
+        # figure above flattering and wrong. Assert it; do not trust it.
+        if not first_holdout_week_is_identical(roll_week):
+            print("\n  *** week one differs between regimes -- the rolling pass")
+            print("      is leaking the holdout. Do not report these numbers. ***")
+            return 3
+        first = int(roll_week.week.min())
+        print(f"\n  week {first} identical under both regimes, as it must be:")
+        print("  nothing is observed yet, so nothing is corrected. Every gain")
+        print("  below appears later, where new information legitimately exists.")
+
+        print("\n  per week (MAPE %):")
+        print(roll_week.pivot_table(index="week", columns="regime",
+                                    values="mape").round(2).to_string())
+        worst = (roll_brand[roll_brand.regime == "blind"]
+                 .sort_values("mape", ascending=False).head(3).brand.tolist())
+        print(f"\n  worst three brands blind ({', '.join(worst)}):")
+        print(roll_brand[roll_brand.brand.isin(worst)]
+              .pivot_table(index="brand", columns="regime", values=["mape", "bias"])
+              .round(2).to_string())
 
     # -- 4. two-part model + market simulation -----------------------------
     _rule(f"4. TWO-PART MODEL AND TOP-{args.k} MARKET PRICE")
