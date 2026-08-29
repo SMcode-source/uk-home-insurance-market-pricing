@@ -171,6 +171,11 @@ cross-provider spread for that risk. It is *not* enough to train per-provider
 models across risk space — that needs licensed vendor data or consented
 panellists. See `docs/DESIGN.md`.
 
+`docs/COLLECTION.md` is the plan for the first real sample — how to spend ~50
+rows so they answer something the synthetic data is currently guessing at, which
+fields may be varied and which may not, and the traps (top-N censoring, saved
+quote caches, monthly APR) that would quietly ruin it.
+
 ## Real postcodes
 
 `features/geo.py` turns a UK postcode into the risk features the models use, so
@@ -337,7 +342,10 @@ scripts/run_poc.py       end-to-end run
 scripts/inspect_vendor.py  profile / map / audit / enrich a vendor extract
 scripts/make_sample_extract.py  synthetic vendor-shaped extract, 8 flavours
 docs/DESIGN.md           why it is built this way -- read before changing models
+docs/COLLECTION.md       plan for the first real sample; read before quoting
 ui/index.html            self-contained results summary; open it in a browser
+ui/render.py             writes the page's figures from a run -- never by hand
+ui/build_public.py       wraps the fragment as a standalone public page
 tests/                   invariants that are easy to break silently
 ```
 

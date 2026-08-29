@@ -75,6 +75,23 @@ that assertion working rather than removing it.
 Artifact fragment; the public page is produced from it by `ui/build_public.py`.
 Do not hand-edit the generated copy — CI rebuilds it and fails on drift.
 
+**Do not hand-edit a figure on the page.** The prose, layout and argument in
+`ui/index.html` are written by hand. Every *number* sits between
+`<!-- gen:name -->` markers and is written by `ui/render.py` from a run's CSVs:
+
+    python scripts/run_poc.py --data ... --out data/processed/poc_sample
+    python ui/render.py --results data/processed/poc_sample
+
+A transcribed number is correct exactly once — the next run moves it and nothing
+complains, which is how the page ends up quietly claiming something the code no
+longer produces. `render.py --check` fails if the page is stale, and a missing
+marker is an error rather than a silent no-op. If you add a figure to the page,
+add a builder for it; if you remove one, remove its marker.
+
+The chart scales are data-driven too (`--scale` on `.tracks` and `.weeks`). Do
+not reintroduce a hardcoded divisor: a future run with a larger error would
+overflow its track and the bar would silently lie.
+
 **Label synthetic data as synthetic, durably.** Generated extracts get a sidecar
 `.NOTE.txt`, and anything published carries the label on its face. The brand
 names are real; the data is not, and a reader who misses that will draw
