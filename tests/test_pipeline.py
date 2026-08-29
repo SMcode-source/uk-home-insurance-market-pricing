@@ -523,3 +523,53 @@ def test_rolling_skips_approaches_that_cannot_recalibrate():
         only=["gbm_per_brand"], verbose=False,
     )
     assert summary.empty
+
+
+def test_each_split_is_persisted_before_the_next_one_starts():
+    """A completed split must survive a crash in the one after it.
+
+    A full run is hours, and until the callback existed nothing could be
+    written until both splits finished -- so a failure in the spatial split
+    discarded the temporal one. That is how this project's ten-approach
+    leaderboard came to survive only in a log file.
+
+    `global_geomean` needs no model library, so this runs everywhere.
+    """
+    from mktpricing.evaluate.compare import run_comparison
+
+    risks, quotes, _ = generate(n_risks=40, n_weeks=6, seed=5)
+    df = build_matrix(quotes, risks)
+
+    seen = []
+    run_comparison(
+        df, holdout_weeks=2, only=["global_geomean"], verbose=False,
+        on_split_done=lambda name, lb, _p: seen.append((name, len(lb))),
+    )
+
+    assert [n for n, _ in seen] == ["temporal", "spatial"], (
+        "the callback must fire once per split, in order"
+    )
+    # The leaderboard handed over must grow, or the callback is being given a
+    # snapshot that does not actually contain the split just finished.
+    assert seen[0][1] == 1 and seen[1][1] == 2
+
+
+def test_a_failing_persist_callback_propagates_rather_than_being_swallowed():
+    """The library must not hide a caller's write error.
+
+    Swallowing it here would leave the caller believing every split had been
+    persisted while the directory stayed empty -- the same silent-staleness
+    failure the callback exists to prevent. Callers that would rather lose the
+    write than the run guard it themselves; `scripts/run_poc.py` does.
+    """
+    from mktpricing.evaluate.compare import run_comparison
+
+    risks, quotes, _ = generate(n_risks=40, n_weeks=6, seed=5)
+    df = build_matrix(quotes, risks)
+
+    def _explode(*_a):
+        raise OSError("disk full")
+
+    with pytest.raises(OSError):
+        run_comparison(df, holdout_weeks=2, only=["global_geomean"],
+                       verbose=False, on_split_done=_explode)

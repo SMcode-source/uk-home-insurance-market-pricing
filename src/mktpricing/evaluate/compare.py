@@ -47,10 +47,24 @@ def run_comparison(
     include_brand: bool = True,
     only=None,
     verbose: bool = True,
+    on_split_done=None,
 ):
     """Evaluate every available approach on both splits.
 
     Returns (leaderboard, predictions, skipped).
+
+    `on_split_done(split_name, leaderboard_so_far, predictions_so_far)` is
+    called after each split finishes, so a caller can persist partial results.
+    A full run is hours -- `ebm_per_brand_trend` alone is ~55 minutes per split
+    -- and without this the caller cannot write anything until both splits are
+    done, so a crash in the second one discards the first. That is how this
+    project's ten-approach leaderboard came to survive only in a log file.
+
+    Exceptions from the callback propagate. This function does not swallow a
+    caller's errors and leave it believing the write succeeded. A caller that
+    would rather lose the write than the run should say so itself -- which is
+    what `scripts/run_poc.py` does, because there a failed write of a finished
+    split must not also destroy the split.
     """
     registry = available_approaches()
     skipped = unavailable_approaches()
@@ -126,6 +140,13 @@ def run_comparison(
                     f"top{k} overlap {row.get(f'top{k}_overlap', float('nan')):5.1f}%   "
                     f"cheapest {row['cheapest_hit']:5.1f}%   ({fit_s:.1f}s)"
                 )
+
+        if on_split_done is not None:
+            on_split_done(
+                split_name,
+                pd.DataFrame(rows),
+                pd.concat(preds, ignore_index=True) if preds else pd.DataFrame(),
+            )
 
     leaderboard = pd.DataFrame(rows)
     predictions = pd.concat(preds, ignore_index=True) if preds else pd.DataFrame()

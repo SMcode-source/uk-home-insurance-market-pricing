@@ -40,31 +40,19 @@ marker balance and the data-driven chart scales, all without fitting a model.
 
 ## Actionable next
 
-Items 1-6 closed 2026-08-29. The page is now generated from `poc_h3`, which
-reproduces every published MdAPE exactly; `render.py --check` returns 0.
+Items 1-6 closed 2026-08-29, then both hardening items. The page is generated
+from `poc_h3`, which reproduces every published MdAPE exactly;
+`render.py --check` returns 0 with no arguments.
 
-1. **Add intermediate persistence to stage 2.** `leaderboard.csv` is the first
-   thing `run_poc.py` writes, at line 114 — after *both* splits finish. A full
-   run with `ebm_per_brand_trend` is ~2.5 hours, so a crash at minute 140
-   leaves zero files, and that is exactly how the ten-approach leaderboard came
-   to survive only in `poc_full2.log`. Write the temporal table before starting
-   the spatial split.
+1. **Collect the first real quotes** — `docs/COLLECTION.md` is the plan. Phase 1
+   is ~44 rows across 8 journeys, roughly 2 hours. Manual, and the only item
+   here that cannot be delegated to the repo: it needs a genuine address and
+   claims history, which is exactly why it cannot be automated.
 
-2. **Record the holdout in the output directory.** Nothing in `poc_h3/` says it
-   was run with `--weeks-holdout 3`. That single flag is the difference between
-   reproducing the published page and producing a plausible-looking set of
-   numbers that answer a different question — it cost a 2h06m run to learn.
-   A `run.json` beside the CSVs carrying the argv would prevent a repeat.
-
-3. **Collect the first real quotes** — `docs/COLLECTION.md` is the plan. Phase 1
-   is ~44 rows across 8 journeys, roughly 2 hours. Manual; cannot be delegated
-   to the repo.
-
-4. **Optional: retire `ebm_per_brand_trend` from routine runs.** Now measured
-   (verdict below), so the open question is closed. It costs 3,341s — 4.25x its
-   base — to score 4.59 against `ebm_per_brand`'s 4.51 at a two-week horizon.
-   Keep it registered for completeness; do not put it in front of a deliverable
-   again.
+2. **Optional: keep `ebm_per_brand_trend` out of routine runs.** Measured now,
+   so the question is closed: 3,341s — 4.25x its base — to score 4.59 against
+   `ebm_per_brand`'s 4.51 at a two-week horizon. Registered for completeness;
+   never put it in front of a deliverable again.
 
 ## Parked — do not re-suggest
 
@@ -105,11 +93,11 @@ the parser is handed a truncated model. It is an OOM wearing a disguise.
 - **The published page is public and the data is synthetic.** Brand names are
   real, premiums are invented. The SYNTHETIC banner is load-bearing; do not
   reword it into something softer.
-- **`--weeks-holdout` defaults to 2; the published page is 3.** Nothing in an
-  output directory records which was used, and the leaderboard looks entirely
-  plausible either way — every model simply scores better on a shorter horizon
-  (`gbm_per_brand` 4.60 at 3 weeks, 2.69 at 2). Check `train=` / `test=` in the
-  log header against 22,259 / 7,353 before trusting a reproduction.
+- **`--weeks-holdout` defaults to 2; the published page is 3.** The leaderboard
+  looks entirely plausible either way — every model simply scores better on a
+  shorter horizon (`gbm_per_brand` 4.60 at 3 weeks, 2.69 at 2). Every output
+  directory now carries `run.json` with the argv that made it, so read that
+  first; before it existed this cost a two-hour run.
 - **Never commit `data/`.** `.gitignore` covers `raw`, `interim`, `processed`
   and `geo`; verified with `git check-ignore` this session.
 - **A brand vanishing from a collection grid is not a missing row.** Declined is

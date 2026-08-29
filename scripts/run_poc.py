@@ -18,6 +18,7 @@ Every number it prints is on held-out data. Nothing here is scored in-sample.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -69,6 +70,30 @@ def main() -> int:
 
     args.out.mkdir(parents=True, exist_ok=True)
 
+    # What produced this directory, written before anything else so it exists
+    # even if the run dies. `--weeks-holdout` defaults to 2 and the published
+    # page is 3; both produce a complete, plausible leaderboard, and every
+    # model simply scores better on the shorter horizon. Telling them apart
+    # afterwards meant reading train/test sizes out of a log, and getting it
+    # wrong once cost a two-hour run.
+    (args.out / "run.json").write_text(
+        json.dumps(
+            {
+                "argv": sys.argv[1:],
+                "weeks_holdout": args.weeks_holdout,
+                "k": args.k,
+                "sims": args.sims,
+                "only": args.only,
+                "data": str(args.data) if args.data else None,
+                "risks": str(args.risks) if args.risks else None,
+                "quick": args.quick,
+                "jobs": args.jobs,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
     # -- 1. data ----------------------------------------------------------
     _rule("1. DATA")
     if args.data:
@@ -104,9 +129,25 @@ def main() -> int:
         for name, why in skipped.items():
             print(f"    {name:18} {why}")
 
+    def _persist_split(split_name, partial, _preds):
+        """Write the leaderboard as each split lands, not once both have.
+
+        A full run is hours. Losing the temporal split because the spatial one
+        died is how the ten-approach leaderboard ended up existing only in a
+        log file. Wrapped because a failed write of a completed split must not
+        also destroy the split -- the run keeps going and says so.
+        """
+        try:
+            format_leaderboard(partial, k=args.k).to_csv(
+                args.out / "leaderboard.csv", index=False)
+            print(f"    [{split_name} written to leaderboard.csv]")
+        except Exception as exc:
+            print(f"    [could not persist {split_name}: "
+                  f"{type(exc).__name__}: {exc}]")
+
     leaderboard, preds, _ = run_comparison(
         df, holdout_weeks=args.weeks_holdout, k=args.k,
-        only=args.only, verbose=True,
+        only=args.only, verbose=True, on_split_done=_persist_split,
     )
     table = format_leaderboard(leaderboard, k=args.k)
     print("\n  LEADERBOARD (sorted by MdAPE within split)\n")
