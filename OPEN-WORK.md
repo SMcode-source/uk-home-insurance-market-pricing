@@ -6,7 +6,7 @@ that and this disagree, **this file wins**.
 
 | | |
 |---|---|
-| `main` head | `8217cfe` "Generate the page from a run that reproduces the published figures" |
+| `main` head | `82b94bf` "Persist each split as it lands, and record what made the directory" — this file's own update is the commit after it |
 | Pushed | yes, both repos |
 | Remote | `SMcode-source/uk-home-insurance-market-pricing` (private) |
 | Public page | `SMcode-source/home-insurance-price-accuracy` at `1121147` → smcode-source.github.io/home-insurance-price-accuracy/. No local clone survives; `gh repo clone` it when needed |
