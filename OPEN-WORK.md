@@ -10,7 +10,7 @@ that and this disagree, **this file wins**.
 | Pushed | yes, both repos |
 | Remote | `SMcode-source/uk-home-insurance-market-pricing` (private) |
 | Public page | `SMcode-source/home-insurance-price-accuracy` at `1121147` → smcode-source.github.io/home-insurance-price-accuracy/. No local clone survives; `gh repo clone` it when needed |
-| Tests | Full suite green on CI for `36dfea9`, Python 3.11 and 3.13 (run `33250614143`); CI for `8217cfe` not yet checked. 209 collected. Run locally with `.venv/Scripts/python -m pytest`, never a bare `python` |
+| Tests | Full suite green on CI for `29075a4`, Python 3.11 and 3.13 (run `33269505529`). 209 collected. CI runs on every push and fails on skips, so it — not this machine — is the authority; locally use `.venv/Scripts/python -m pytest`, never a bare `python` |
 | Uncommitted | none |
 
 ## Blocked on owner
