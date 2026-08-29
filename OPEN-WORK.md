@@ -6,12 +6,12 @@ that and this disagree, **this file wins**.
 
 | | |
 |---|---|
-| `main` head | `dba13ee` "Generate the page's figures from the run that produced them" |
-| Pushed | yes — no commits ahead of `origin/main` |
+| `main` head | `36dfea9` — merge of the collection plan, page column contract and this handoff |
+| Pushed | yes, both repos |
 | Remote | `SMcode-source/uk-home-insurance-market-pricing` (private) |
-| Public page | `SMcode-source/home-insurance-price-accuracy` → smcode-source.github.io/home-insurance-price-accuracy/ — a separate clone, not a remote here |
-| Tests | 209 collected; `tests/test_page.py` 4/4 green. **Full suite not run since the memory problem started** — treat 209 as a collection count, not a pass count |
-| Uncommitted | `CONTRIBUTING.md`, `README.md`, `docs/DESIGN.md`, `evaluate/compare.py`, `ui/render.py` modified; `docs/COLLECTION.md`, `tests/test_page.py` new |
+| Public page | `SMcode-source/home-insurance-price-accuracy` at `7639888` → smcode-source.github.io/home-insurance-price-accuracy/. No local clone survives; `gh repo clone` it when needed |
+| Tests | Full suite green on CI for `36dfea9`, Python 3.11 and 3.13 (run `33250614143`). 209 collected locally; only `tests/test_page.py` (4/4) was run locally — the memory problem blocks LightGBM here, so **CI, not this machine, is the authority on the suite** |
+| Uncommitted | none |
 
 ## Blocked on owner
 
@@ -79,9 +79,10 @@ model fit, so they run even with no memory.
 
 5. **Commit the uncommitted work** listed in the header table.
 
-6. **Confirm CI is green on GitHub.** `.github/workflows/tests.yml` has never
-   been observed running. `tests/test_page.py` joins the default `pytest -q`
-   automatically, so it is covered without a workflow edit.
+6. ~~**Confirm CI is green on GitHub.**~~ Done — it had already run and passed
+   twice before this session looked (runs `33215693604` and `33216783471`, both
+   green, ~2 min each). `tests/test_page.py` joins the default `pytest -q`
+   automatically, so it needed no workflow edit.
 
 7. **Collect the first real quotes** — `docs/COLLECTION.md` is the plan.
    Phase 1 is ~44 rows across 8 journeys, roughly 2 hours. This is a manual
