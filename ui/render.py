@@ -183,9 +183,14 @@ def churchill_weeks(per_brand_week, brand):
     rows = []
     for w in blind.index:
         bb, rr = blind.loc[w], roll.loc[w]
+        # Both columns take the same rule. Hardcoding the blind column red
+        # made the first holdout week render as two different colours showing
+        # one identical number -- nothing has been observed yet when it is
+        # priced, so the two regimes agree there by construction, and a reader
+        # who spots the mismatch is right to distrust the rest of the table.
         rows.append(
             f"          <tr><td>Week {int(w)}</td>"
-            f'<td class="neg">{_pct(bb.bias, 1, True)}%</td>'
+            f"<td{_cls(bb.bias, good_below=7, bad_above=15)}>{_pct(bb.bias, 1, True)}%</td>"
             f"<td{_cls(rr.bias, good_below=7, bad_above=15)}>{_pct(rr.bias, 1, True)}%</td>"
             f"<td>{bb.mape:.2f}%</td><td>{rr.mape:.2f}%</td></tr>"
         )
@@ -217,9 +222,15 @@ def leaderboard(lb):
     t = lb[lb.split == "temporal"].set_index("approach")
     s = lb[lb.split == "spatial"].set_index("approach")
     best = t.mdape.idxmin()
+    # The two splits disagree about the winner on this project, which is the
+    # whole reason both are reported. Marking each column's own best keeps that
+    # disagreement visible instead of letting the temporal ranking imply it.
+    best_spatial = s.mdape.idxmin() if not s.empty else None
     rows = []
     for name in t.sort_values("mdape").index:
         spatial = f"{s.loc[name].mdape:.2f}" if name in s.index else "&mdash;"
+        if name == best_spatial:
+            spatial = f'<span class="pos">{spatial}</span>'
         cls = ' class="best"' if name == best else ""
         fit = t.loc[name].fit_s
         fit_s = "&lt;1s" if fit < 1 else f"{fit:.0f}s"

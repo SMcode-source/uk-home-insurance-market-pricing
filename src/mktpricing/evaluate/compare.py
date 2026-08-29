@@ -301,9 +301,18 @@ def residual_profile(
     extrapolating harder both made it worse before this was measured, which is
     why the diagnostic is now part of the run rather than an ad-hoc script.
 
-    Residuals are reported as a percentage of premium, from the model with its
-    week clamped to the training window -- i.e. what the point model alone
-    would say, before any forward correction.
+    Residuals are reported as a percentage of premium, from `approach` as it
+    actually predicts -- point model with its week clamped, *plus* whatever
+    forward correction that approach applies. It is not the raw uncorrected
+    residual, and an earlier version of this docstring wrongly said it was.
+
+    For the default that distinction is immaterial and measured to be so: on the
+    sample data `gbm_per_brand_trend` scores 4.48 against `gbm_per_brand`'s 4.60
+    at a three-week horizon and is marginally *worse* at two weeks, so the
+    correction moves these residuals by a few tenths of a point. It matters if
+    you ever pass an approach whose correction earns its keep, because then this
+    reports what the correction failed to remove rather than the size of the
+    break itself.
     """
     cls = available_approaches().get(approach)
     if cls is None:
