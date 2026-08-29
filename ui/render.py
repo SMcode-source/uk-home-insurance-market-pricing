@@ -27,6 +27,15 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 PAGE = HERE / "index.html"
 
+# The subset of `evaluate.compare.AGG_COLUMNS` this page actually reads, plus
+# the regime key. Kept as a literal rather than imported: render.py runs against
+# a directory of CSVs and should not need the package importable to tell you
+# which column went missing.
+NEEDS_SUMMARY = (
+    "regime", "n", "mean_actual", "mape", "mdape", "bias", "sd_pe", "var_pe",
+    "within_10pct", "mae_gbp",
+)
+
 # Display names for the leaderboard. The registry names are for the CLI; a
 # first-time reader should not have to decode `ebm_per_brand`.
 NAMES = {
@@ -259,6 +268,25 @@ def main() -> int:
     per_brand_week = pd.read_csv(args.results / "rolling_per_brand_week.csv")
     prof = pd.read_csv(args.results / "residual_by_week.csv")
     lb = pd.read_csv(args.results / "leaderboard.csv")
+
+    # Fail here, naming the column, rather than three frames later inside a
+    # builder with an AttributeError. These names are `compare.AGG_COLUMNS`
+    # plus the keys; a rename upstream reaches the page and nothing else.
+    for frame, name, need in (
+        (roll, "rolling.csv", NEEDS_SUMMARY),
+        (per_brand, "rolling_per_brand.csv", NEEDS_SUMMARY + ("brand",)),
+        (per_brand_week, "rolling_per_brand_week.csv",
+         ("regime", "brand", "week", "bias", "mape")),
+        (prof, "residual_by_week.csv", ("brand", "week", "resid_pct", "window")),
+        (lb, "leaderboard.csv", ("approach", "split", "mdape",
+                                 "within_10pct", "fit_s")),
+    ):
+        absent = [c for c in need if c not in frame.columns]
+        if absent:
+            print(f"{name} is missing {', '.join(absent)}")
+            print("the run that produced it predates these columns, or a metric "
+                  "was renamed in evaluate/compare.py without updating render.py")
+            return 2
 
     # The narrative is about whichever brand is worst, not about Churchill by
     # name. If a future run has a different worst brand, the page should follow

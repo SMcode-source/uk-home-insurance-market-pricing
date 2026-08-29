@@ -358,6 +358,16 @@ week the data ends, stop tuning the estimator and go and get the next week.
 
 ## Known limitations
 
+**No real quote has ever been collected.** Every number this repo has produced,
+including every figure on the published page, comes from
+`collect/synthetic.py` by way of `scripts/make_sample_extract.py`. The brand
+names are real and the premiums are invented, so a per-brand result names a real
+insurer about a price it never quoted. `data/geo/` is empty too — the reference
+sources `features/geo.py` names have not been downloaded, and the flood, crime
+and subsidence bands in the sample are the generator's own invented table.
+`docs/COLLECTION.md` is the plan for changing that; until it is executed, treat
+every accuracy figure as a statement about the *pipeline*, not about the market.
+
 **Single-identity manual collection.** One real person quoting one real property
 yields **one risk profile**. That validates the pipeline and benchmarks
 cross-provider spread and top-5 accuracy for that risk. It cannot train

@@ -132,6 +132,17 @@ def run_comparison(
     return leaderboard, predictions, skipped
 
 
+#: Metric columns `_agg` produces, and therefore the column names that reach the
+#: rolling CSVs. `ui/render.py` reads these by name to build the published page,
+#: so renaming one here breaks the page and nothing else -- which is exactly the
+#: silent failure this repo keeps trying to avoid. `tests/test_pipeline.py` pins
+#: the set; change it there deliberately or not at all.
+AGG_COLUMNS = (
+    "n", "mean_actual", "mape", "mdape", "bias", "mean_pe", "sd_pe", "var_pe",
+    "within_5pct", "within_10pct", "within_20pct", "mae_gbp",
+)
+
+
 def rolling_comparison(
     df: pd.DataFrame,
     *,
