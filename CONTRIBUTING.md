@@ -15,13 +15,23 @@ slope harder, that section already contains the experiment and the number.
 ```bash
 python -m venv .venv
 .venv/Scripts/python -m pip install -e ".[models,dev]"   # Windows
-pytest -q                                                # ~6 minutes, 201 tests
+.venv/Scripts/python -m pytest -q                        # ~6 minutes, 209 tests
 ```
+
+**Run it through `.venv/Scripts/python`, not a bare `python`.** On Windows the
+bare name usually resolves to the Microsoft Store shim, which has `pandas` and
+`numpy` but none of the model libraries. Eighteen tests are guarded by
+`pytest.importorskip("lightgbm")` — every `recalibrate()` test in
+`test_drift.py` and both leak-guard tests in `test_pipeline.py` — so on the
+wrong interpreter the suite reports success having skipped exactly the
+invariants that matter most. It still *collects* 209 either way, which is why
+the collection count proves nothing on its own.
 
 The model libraries are optional by design: an approach whose library is missing
 is reported as **skipped**, never silently dropped. That is deliberate for local
 work and dangerous in CI, so `.github/workflows/tests.yml` fails the build if
 anything is skipped — a green run over a shrunken lineup is worse than a red one.
+CI is therefore the authority on the suite; a local pass is a convenience.
 
 ## Memory before speed
 

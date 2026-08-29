@@ -111,7 +111,19 @@ the parser is handed a truncated model. It is an OOM wearing a disguise.
 
 - **`--only` runs overwrite the full run's CSVs.** That is how the ten-approach
   leaderboard came to exist only in a log file. Give every `--only` run its own
-  `--out`.
+  `--out`. `data/processed/poc_full/` is reserved for full runs — do not point
+  an `--only` run at it.
+- **A bare `python` is not this project's interpreter.** It resolves to the
+  Store shim, which has pandas and numpy but no LightGBM, EBM, CatBoost,
+  sklearn or pyarrow. Eighteen tests `importorskip("lightgbm")` and vanish
+  silently, so `pytest` there reports success having skipped every
+  `recalibrate()` and leak-guard test. Always `.venv/Scripts/python -m pytest`.
+- **Running without `--data` overwrites `risks.parquet` and `quotes.parquet`
+  in `--out`.** The published figures come from the existing pair at
+  `data/processed/`; reproduce them with
+  `--data data/processed/quotes.parquet --risks data/processed/risks.parquet`,
+  not from a fresh `generate()`, whose defaults are 900 risks over 26 weeks and
+  a different dataset entirely.
 - **The published page is public and the data is synthetic.** Brand names are
   real, premiums are invented. The SYNTHETIC banner is load-bearing; do not
   reword it into something softer.
