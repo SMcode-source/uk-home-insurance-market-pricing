@@ -6,87 +6,65 @@ that and this disagree, **this file wins**.
 
 | | |
 |---|---|
-| `main` head | `36dfea9` — merge of the collection plan, page column contract and this handoff |
+| `main` head | `8217cfe` "Generate the page from a run that reproduces the published figures" |
 | Pushed | yes, both repos |
 | Remote | `SMcode-source/uk-home-insurance-market-pricing` (private) |
-| Public page | `SMcode-source/home-insurance-price-accuracy` at `7639888` → smcode-source.github.io/home-insurance-price-accuracy/. No local clone survives; `gh repo clone` it when needed |
-| Tests | Full suite green on CI for `36dfea9`, Python 3.11 and 3.13 (run `33250614143`). 209 collected locally; only `tests/test_page.py` (4/4) was run locally — the memory problem blocks LightGBM here, so **CI, not this machine, is the authority on the suite** |
+| Public page | `SMcode-source/home-insurance-price-accuracy` at `1121147` → smcode-source.github.io/home-insurance-price-accuracy/. No local clone survives; `gh repo clone` it when needed |
+| Tests | Full suite green on CI for `36dfea9`, Python 3.11 and 3.13 (run `33250614143`); CI for `8217cfe` not yet checked. 209 collected. Run locally with `.venv/Scripts/python -m pytest`, never a bare `python` |
 | Uncommitted | none |
 
 ## Blocked on owner
 
-**Restart the McAfee Framework Host.** `mc-fw-host` (pid 5088 at time of
-writing) held **26.0 GB of the 39.6 GB** total process commit, with the system
-at 64,975 MB of 65,221 MB and 246 MB free. `sc.exe stop mc-fw-host` returns
-*Access is denied* — this session is not elevated. In an elevated PowerShell:
-
-    Restart-Service mc-fw-host -Force
-
-Everything under "actionable next" needs a Python run, and Python runs are
-currently dying: the EBM job exited 127 at 23:33, and `bash` itself returned
-exit 45/66 on three separate calls this session. Those are fork failures, not
-code failures. Do not debug them as code failures.
+Nothing. The McAfee Framework Host restart cleared the memory crisis: commit in
+use fell from 64,975 MB to 17,900 MB, free commit from 246 MB to 34,228 MB, and
+the full run that had died twice completed on the first attempt afterwards. If
+the fork failures (`bash` exit 45/66/127, LightGBM "Model format error") ever
+return, check `mc-fw-host` first — it was holding 26.0 of 39.6 GB.
 
 ## Where the code stands
 
-The page's figures are *mechanically* generated but the mechanism has **never
-been run end to end**. `ui/render.py` splices eight `<!-- gen: -->` regions;
-all eight markers are present in `ui/index.html` (verified in both HEAD and
-worktree) and the two chart scales read `var(--scale)` from the data. What is
-missing is a results directory it can actually run against — see below.
+**The page is generated, and the mechanism has been run end to end.**
+`data/processed/poc_h3/` is a `--weeks-holdout 3` run over the ten approaches
+the page shows, and it reproduces every published MdAPE exactly (47.33 / 42.31 /
+13.47 / 9.91 / 6.72 / 5.63 / 4.60 / 6.29 / 5.30 / 4.48, both splits).
+`ui/render.py --check` returns 0 against it, and `--results` now defaults there.
 
-`recalibrate()`, the rolling harness, stage 3b of `run_poc.py` and the
-first-holdout-week leak guard are all committed and were verified end to end
-before the memory problem. `residual_profile()` has still never executed.
+`residual_profile()` has run. Churchill's maximum training-week residual is
+0.142% against the page's stated 0.15%, then +8.89 / +18.53 / +22.84 across the
+three held-out weeks — the structural break, measured rather than asserted.
 
-New this session and uncommitted: `AGG_COLUMNS` in `evaluate/compare.py` pins
-the metric column names the page reads; `ui/render.py` now fails at load with
-the missing column named rather than an `AttributeError` three frames deep;
-`tests/test_page.py` guards the column contract, the marker set, marker
-balance, and that the chart divisors stay data-driven. Those four tests need no
-model fit, so they run even with no memory.
+`recalibrate()`, the rolling harness, stage 3b and the first-holdout-week leak
+guard are all exercised by that run. `AGG_COLUMNS` pins the twelve metric names
+the page reads; `tests/test_page.py` guards the column contract, the marker set,
+marker balance and the data-driven chart scales, all without fitting a model.
 
 ## Actionable next
 
-1. **Regenerate a full results directory.** This is the real blocker, and it is
-   worse than "poc_sample is missing two files". `poc_sample/leaderboard.csv`
-   holds **two** approaches (`gbm_per_brand`, `gbm_per_brand_trend`) because it
-   was an `--only` run; `data/processed/leaderboard.csv` holds two others
-   (`ridge_log`, `brand_geomean`) for the same reason. The ten-approach
-   leaderboard on the published page survives **only** in
-   `data/processed/poc_full2.log` — a log, not a CSV. Later `--only` runs
-   overwrote the CSVs that produced it. So `render.py` cannot currently
-   reproduce the published page from anything in the repo, and pointing it at
-   `poc_sample` would silently shrink the leaderboard from ten rows to two.
-   Fix by running the full POC once, to its own `--out`, and not reusing that
-   directory for `--only` runs.
+Items 1-6 closed 2026-08-29. The page is now generated from `poc_h3`, which
+reproduces every published MdAPE exactly; `render.py --check` returns 0.
 
-2. **Run `ui/render.py` and diff.** Once (1) exists, run it and confirm the
-   output matches the current hand-written content. Any difference is either a
-   builder bug or a number that was wrong on the page. Then rebuild the public
-   page with `ui/build_public.py` and push the public repo.
+1. **Add intermediate persistence to stage 2.** `leaderboard.csv` is the first
+   thing `run_poc.py` writes, at line 114 — after *both* splits finish. A full
+   run with `ebm_per_brand_trend` is ~2.5 hours, so a crash at minute 140
+   leaves zero files, and that is exactly how the ten-approach leaderboard came
+   to survive only in `poc_full2.log`. Write the temporal table before starting
+   the spatial split.
 
-3. **Exercise `residual_profile()`.** It is committed, wired into stage 3b, and
-   has never run. Its output feeds the `weeks` chart.
+2. **Record the holdout in the output directory.** Nothing in `poc_h3/` says it
+   was run with `--weeks-holdout 3`. That single flag is the difference between
+   reproducing the published page and producing a plausible-looking set of
+   numbers that answer a different question — it cost a 2h06m run to learn.
+   A `run.json` beside the CSVs carrying the argv would prevent a repeat.
 
-4. **Settle `ebm_per_brand_trend`.** Never scored — two attempts died. It is
-   listed in the README approach table (correctly, as a lineup entry) and is
-   correctly absent from the page's leaderboard, which shows the ten approaches
-   that actually have numbers. **Verdict criterion:** if a full run including
-   it completes, add its row; if it dies a third time on memory, drop it from
-   the table and say why, rather than leaving a described-but-unmeasured
-   approach in the lineup indefinitely.
+3. **Collect the first real quotes** — `docs/COLLECTION.md` is the plan. Phase 1
+   is ~44 rows across 8 journeys, roughly 2 hours. Manual; cannot be delegated
+   to the repo.
 
-5. **Commit the uncommitted work** listed in the header table.
-
-6. ~~**Confirm CI is green on GitHub.**~~ Done — it had already run and passed
-   twice before this session looked (runs `33215693604` and `33216783471`, both
-   green, ~2 min each). `tests/test_page.py` joins the default `pytest -q`
-   automatically, so it needed no workflow edit.
-
-7. **Collect the first real quotes** — `docs/COLLECTION.md` is the plan.
-   Phase 1 is ~44 rows across 8 journeys, roughly 2 hours. This is a manual
-   task and cannot be delegated to the repo.
+4. **Optional: retire `ebm_per_brand_trend` from routine runs.** Now measured
+   (verdict below), so the open question is closed. It costs 3,341s — 4.25x its
+   base — to score 4.59 against `ebm_per_brand`'s 4.51 at a two-week horizon.
+   Keep it registered for completeness; do not put it in front of a deliverable
+   again.
 
 ## Parked — do not re-suggest
 
@@ -111,7 +89,7 @@ the parser is handed a truncated model. It is an OOM wearing a disguise.
 
 - **`--only` runs overwrite the full run's CSVs.** That is how the ten-approach
   leaderboard came to exist only in a log file. Give every `--only` run its own
-  `--out`. `data/processed/poc_full/` is reserved for full runs — do not point
+  `--out`. `data/processed/poc_h3/` is the one the page is built from — do not point
   an `--only` run at it.
 - **A bare `python` is not this project's interpreter.** It resolves to the
   Store shim, which has pandas and numpy but no LightGBM, EBM, CatBoost,
@@ -127,8 +105,11 @@ the parser is handed a truncated model. It is an OOM wearing a disguise.
 - **The published page is public and the data is synthetic.** Brand names are
   real, premiums are invented. The SYNTHETIC banner is load-bearing; do not
   reword it into something softer.
-- **`render.py --results` defaults to `data/processed/poc_sample`,** which is
-  currently a two-approach directory. The default is a trap until (1) is done.
+- **`--weeks-holdout` defaults to 2; the published page is 3.** Nothing in an
+  output directory records which was used, and the leaderboard looks entirely
+  plausible either way — every model simply scores better on a shorter horizon
+  (`gbm_per_brand` 4.60 at 3 weeks, 2.69 at 2). Check `train=` / `test=` in the
+  log header against 22,259 / 7,353 before trusting a reproduction.
 - **Never commit `data/`.** `.gitignore` covers `raw`, `interim`, `processed`
   and `geo`; verified with `git check-ignore` this session.
 - **A brand vanishing from a collection grid is not a missing row.** Declined is

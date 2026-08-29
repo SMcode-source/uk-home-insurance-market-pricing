@@ -258,8 +258,11 @@ def splice(page: str, name: str, body: str) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
+    # poc_h3, not poc_sample: the published page is a --weeks-holdout 3 run,
+    # and poc_sample is the two-approach residue of an --only run. Defaulting
+    # there rendered a ten-row leaderboard as two and looked like it worked.
     ap.add_argument("--results", type=Path,
-                    default=ROOT / "data" / "processed" / "poc_sample")
+                    default=ROOT / "data" / "processed" / "poc_h3")
     ap.add_argument("--page", type=Path, default=PAGE)
     ap.add_argument("--check", action="store_true",
                     help="fail if the page would change, instead of writing it")
