@@ -1,4 +1,5 @@
-"""Vendor extract adapter -- Consumer Intelligence, Defaqto, or anything else.
+"""Vendor extract adapter -- Consumer Intelligence, Pearson Ham, Defaqto, or
+anything else that arrives as a file.
 
 Maps a licensed extract onto the canonical schema in `schema.py`, so vendor rows
 and hand-collected rows train the same models and nothing downstream cares which
@@ -6,13 +7,32 @@ they came from.
 
 Read this before using it
 -------------------------
-**No sample extract has been seen.** The column names in `CI_SPEC` and
-`DEFAQTO_SPEC` are provisional -- assembled from published vendor terminology,
-not from a real file -- and they will be wrong in detail. That is why the module
-is mapping-driven rather than hard-coded: when the first extract lands, run
-`profile_extract()`, paste the suggested mapping into a `VendorSpec`, and the
-rest of the pipeline works unchanged. Correcting a spec is a config edit. It
-should never require touching the loader.
+**No sample extract has been seen.** The column names in `CI_SPEC`,
+`PEARSON_HAM_SPEC` and `DEFAQTO_SPEC` are provisional -- assembled from
+published vendor terminology, not from a real file -- and they will be wrong in
+detail. That is why the module is mapping-driven rather than hard-coded: when
+the first extract lands, run `profile_extract()`, write the suggested mapping to
+a spec file under `config/vendor_specs/`, correct it, and the rest of the
+pipeline works unchanged. Correcting a spec is a config edit. It should never
+require touching the loader.
+
+A spec lives in one of two places, and they are the same object:
+
+- a `VendorSpec` in this module (`SPECS["ci"]`), or
+- a YAML file (`config/vendor_specs/ci.yml`), loaded with `load_spec()`.
+
+The YAML form is the one to edit when a real file arrives; the Python form
+exists so tests and scripts have something to import.
+
+What a file can look like
+-------------------------
+`read_extract()` accepts CSV (any delimiter, optionally gzip- or zip-
+compressed), TSV, Excel (`.xlsx`/`.xlsm`/`.xls`, one named sheet, with title
+rows skipped via `header_row`), Parquet and JSON. `read_extracts()` takes a
+directory, a glob or a list and stacks the files, which is how a vendor that
+delivers one file per day or week is loaded. A spec with `layout: wide` melts
+a brands-across-the-columns table (one row per risk, one column per brand,
+premiums in the cells) into the long form everything else expects.
 
 The audits are the point
 ------------------------
@@ -42,8 +62,10 @@ WARN / INFO. Run it before the first model fit, not after the first odd result.
 
 from __future__ import annotations
 
+import csv
+import glob as _glob
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, fields as _dc_fields, replace
 from pathlib import Path
 
 import numpy as np
@@ -56,7 +78,9 @@ from ..schema import QUOTE_COLUMNS, RISK_COLUMNS, Quote, Risk, Source
 # provider registry
 # ---------------------------------------------------------------------------
 
-_DEFAULT_PROVIDERS = Path(__file__).resolve().parents[3] / "config" / "providers.yml"
+_CONFIG_DIR = Path(__file__).resolve().parents[3] / "config"
+_DEFAULT_PROVIDERS = _CONFIG_DIR / "providers.yml"
+SPEC_DIR = _CONFIG_DIR / "vendor_specs"
 
 
 def load_providers(path=None) -> dict:
@@ -249,17 +273,90 @@ class VendorSpec:
     date_format: str | None = None          # None = let pandas infer
     dayfirst: bool = True                  # UK files are almost always dd/mm/yyyy
 
+    # -- how the file is laid out -------------------------------------------
+    # Excel: which sheet holds the data (name or 0-based index; None = first),
+    # and how many title rows sit above the header. CSV: delimiter (None =
+    # sniff) and encoding (None = utf-8, falling back to cp1252).
+    sheet: str | int | None = None
+    header_row: int = 0
+    delimiter: str | None = None
+    encoding: str | None = None
+
+    # "long" = one row per quote (the default and the shape everything else
+    # expects). "wide" = one row per risk (per date, per channel) with one
+    # column per brand and the premium in the cell, as an Excel "raw data"
+    # tab often is. Wide files are melted before mapping: every column that
+    # is neither mapped in `columns` nor listed in `wide_ignore` is a brand.
+    # A blank cell is ambiguous -- the brand may have declined, or may not be
+    # on that panel -- so what it means is declared, not guessed.
+    layout: str = "long"
+    wide_brand_columns: list = field(default_factory=list)   # [] = infer
+    wide_ignore: list = field(default_factory=list)
+    wide_blank_means: str = "absent"        # "absent" (drop) or "declined"
+
+    # Free text: where the field list came from, what is still unconfirmed.
+    notes: str = ""
+
     def value_map(self, field_name: str) -> dict:
         base = dict(DEFAULT_VALUE_MAPS.get(field_name, {}))
         base.update({_norm_token(k): v for k, v in self.values.get(field_name, {}).items()})
         return base
 
+    # -- YAML form ------------------------------------------------------------
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "VendorSpec":
+        known = {f.name for f in _dc_fields(cls)}
+        unknown = sorted(set(data) - known)
+        if unknown:
+            raise ValueError(
+                f"spec has unknown key(s) {unknown}; known keys are {sorted(known)}"
+            )
+        spec = cls(**data)
+        if spec.layout not in ("long", "wide"):
+            raise ValueError(f"layout must be 'long' or 'wide', got {spec.layout!r}")
+        if spec.wide_blank_means not in ("absent", "declined"):
+            raise ValueError("wide_blank_means must be 'absent' or 'declined'")
+        Source(spec.source)   # raises on an unknown provenance
+        return spec
+
+    def to_yaml(self, path=None) -> str:
+        text = yaml.safe_dump(self.to_dict(), sort_keys=False, allow_unicode=True,
+                              default_flow_style=False)
+        if path is not None:
+            Path(path).write_text(text, encoding="utf-8")
+        return text
+
+    @classmethod
+    def from_yaml(cls, path) -> "VendorSpec":
+        with Path(path).open(encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+        if not isinstance(data, dict):
+            raise ValueError(f"{path}: a spec file must be a mapping at the top level")
+        return cls.from_dict(data)
+
 
 # Provisional. Verify every column name against a real extract before trusting
 # these; they exist so the first mapping is an edit rather than a blank page.
+# docs/VENDOR-EXTRACTS.md records what each vendor is known to deliver and
+# which of these names are guesses. The YAML twins live in config/vendor_specs/.
 CI_SPEC = VendorSpec(
     name="Consumer Intelligence",
     source=Source.vendor_ci.value,
+    notes=(
+        "Provisional. Home Insurance Market View states its content as the "
+        "annual price and, where relevant, compulsory and voluntary excess for "
+        "each insurer on the market, plus ranking; raw data is delivered as Excel "
+        "spreadsheets, weekly or monthly, across the four PCWs and 32-34 direct "
+        "sites. Voluntary excess is set per profile, so it lives on the risk. "
+        "Underwriter View adds the underwriter (from MoneySuperMarket only): map "
+        "its column to `underwriter` when that product is licensed. IPT, decline "
+        "rows and truncation are unconfirmed. Column names are guesses until a "
+        "file has been profiled. docs/VENDOR-EXTRACTS.md."
+    ),
     columns={
         "risk_id": "QuoteReference",
         "brand": "Brand",
@@ -284,9 +381,58 @@ CI_SPEC = VendorSpec(
     },
 )
 
+PEARSON_HAM_SPEC = VendorSpec(
+    name="Pearson Ham (historic raw files)",
+    source=Source.vendor_ph.value,
+    notes=(
+        "Provisional, and for HISTORIC files only. Pearson Ham Group's insurance "
+        "pricing business was sold to Defaqto in January 2026 and rebranded "
+        "Defaqto Market Pricing in June 2026; current deliveries come under "
+        "DEFAQTO_SPEC. This spec exists for pre-2026 raw files a licensee may "
+        "receive as history, whose layout may differ. Four PCWs, daily, a panel "
+        "of real consumers rotated after a few days; whether the file carries "
+        "declines, the underwriter, or a full panel is unconfirmed. Column names "
+        "are guesses until a file has been profiled. docs/VENDOR-EXTRACTS.md."
+    ),
+    columns={
+        "risk_id": "RiskRef",
+        "brand": "Brand",
+        "underwriter": "Underwriter",
+        "channel": "PCW",
+        "collected_on": "PriceDate",
+        "premium": "AnnualPremium",
+        "quoted": "QuoteStatus",
+        "rank_on_page": "Position",
+        "postcode": "Postcode",
+        "policy_type": "CoverType",
+        "building_type": "PropertyType",
+        "construction": "Construction",
+        "occupancy": "Occupancy",
+        "year_built": "YearBuilt",
+        "bedrooms": "Bedrooms",
+        "buildings_sum_insured": "BuildingsSumInsured",
+        "contents_sum_insured": "ContentsSumInsured",
+        "voluntary_excess": "VoluntaryExcess",
+        "compulsory_excess": "CompulsoryExcess",
+        "claims_last_5y": "Claims5Years",
+        "accidental_damage": "AccidentalDamage",
+    },
+)
+
 DEFAQTO_SPEC = VendorSpec(
     name="Defaqto Market Pricing",
     source=Source.vendor_dfq.value,
+    notes=(
+        "Provisional. Defaqto Market Pricing is the former Pearson Ham pricing "
+        "business (acquired January 2026, rebranded June 2026). Prices come from "
+        "the four PCWs only -- no direct channel is mentioned anywhere -- on a "
+        "real-consumer panel where each profile runs for a few consecutive days "
+        "and drops out, so expect the audit's rotating_panel finding and index "
+        "off matched risks only. Premium basis, IPT, decline rows and top-N "
+        "truncation are all unconfirmed; their public index is a top-5 average, "
+        "so a top-5 cut is a real possibility. Column names are guesses until a "
+        "file has been profiled. docs/VENDOR-EXTRACTS.md."
+    ),
     columns={
         "risk_id": "RiskId",
         "brand": "ProviderName",
@@ -310,29 +456,208 @@ DEFAQTO_SPEC = VendorSpec(
     },
 )
 
-SPECS = {"ci": CI_SPEC, "defaqto": DEFAQTO_SPEC}
+# Two vendors sell this data in 2026: Consumer Intelligence and Defaqto Market
+# Pricing. "pearson_ham" is kept for the historic files of the business Defaqto
+# bought; a current delivery is "defaqto".
+SPECS = {"ci": CI_SPEC, "defaqto": DEFAQTO_SPEC, "pearson_ham": PEARSON_HAM_SPEC}
+
+
+def load_spec(name_or_path) -> VendorSpec:
+    """Resolve a spec by built-in name, by file under `config/vendor_specs/`,
+    or by an explicit path to a YAML file.
+
+    A file wins over the built-in of the same name, because the file is the
+    one a real extract has been checked against. A path is what you pass while
+    the mapping is still being corrected; a name is what you pass afterwards.
+    """
+    if isinstance(name_or_path, VendorSpec):
+        return name_or_path
+    s = str(name_or_path)
+    p = Path(s)
+    if p.suffix.lower() in (".yml", ".yaml") or p.exists():
+        if not p.exists():
+            raise FileNotFoundError(f"spec file {p} does not exist")
+        return VendorSpec.from_yaml(p)
+    for candidate in (SPEC_DIR / f"{s}.yml", SPEC_DIR / f"{s}.yaml"):
+        if candidate.exists():
+            return VendorSpec.from_yaml(candidate)
+    if s in SPECS:
+        return SPECS[s]
+    known = sorted(set(SPECS) | {q.stem for q in SPEC_DIR.glob("*.y*ml")}) \
+        if SPEC_DIR.exists() else sorted(SPECS)
+    raise KeyError(f"no vendor spec {s!r}; known: {known}, or pass a path to a .yml")
+
+
+def known_specs() -> list:
+    """Names `load_spec()` accepts without a path."""
+    names = set(SPECS)
+    if SPEC_DIR.exists():
+        names |= {q.stem for q in SPEC_DIR.glob("*.y*ml")}
+    return sorted(names)
 
 
 # ---------------------------------------------------------------------------
 # reading and profiling
 # ---------------------------------------------------------------------------
 
+_TEXT_SUFFIXES = (".csv", ".tsv", ".tab", ".txt", ".dat", ".psv")
+_EXCEL_SUFFIXES = (".xlsx", ".xlsm", ".xls")
 
-def read_extract(path) -> pd.DataFrame:
-    """Read csv / tsv / parquet / xlsx. Everything stays as text where possible.
+
+def _read_head(p: Path, compression, encoding: str) -> str:
+    """The first 64 KB of text, through gzip / bz2 / xz / zip if need be."""
+    import bz2
+    import gzip
+    import lzma
+    import zipfile
+
+    suffix = p.suffix.lower()
+    if compression is None:
+        with p.open("rb") as fh:
+            raw = fh.read(64 * 1024)
+    elif suffix == ".gz":
+        with gzip.open(p, "rb") as fh:
+            raw = fh.read(64 * 1024)
+    elif suffix == ".bz2":
+        with bz2.open(p, "rb") as fh:
+            raw = fh.read(64 * 1024)
+    elif suffix == ".xz":
+        with lzma.open(p, "rb") as fh:
+            raw = fh.read(64 * 1024)
+    elif suffix == ".zip":
+        with zipfile.ZipFile(p) as zf:
+            names = [n for n in zf.namelist() if not n.endswith("/")]
+            if len(names) != 1:
+                raise ValueError(f"{p.name}: a zip must hold exactly one data file, has {names}")
+            with zf.open(names[0]) as fh:
+                raw = fh.read(64 * 1024)
+    else:
+        raise ValueError(f"cannot sniff inside {suffix}")
+    return raw.decode(encoding, errors="strict")
+
+
+def _sniff_delimiter(p: Path, compression, encoding: str, inner: str) -> str:
+    head = _read_head(p, compression, encoding)
+    try:
+        return csv.Sniffer().sniff(head, delimiters=",;\t|").delimiter
+    except csv.Error:
+        return "\t" if inner in (".tsv", ".tab") else ","
+
+
+def _strip_compression(p: Path):
+    """('file.csv.gz' -> ('.csv', 'gzip')); pandas infers the codec itself."""
+    suffixes = [s.lower() for s in p.suffixes]
+    if suffixes and suffixes[-1] in (".gz", ".bz2", ".zip", ".xz", ".zst"):
+        inner = suffixes[-2] if len(suffixes) > 1 else ".csv"
+        return inner, "infer"
+    return (suffixes[-1] if suffixes else ".csv"), None
+
+
+def read_extract(path, *, sheet=None, header_row: int = 0, delimiter=None,
+                 encoding=None) -> pd.DataFrame:
+    """Read one file in whatever form the vendor sent it. Text stays text.
+
+    Handles CSV with any common delimiter (sniffed unless given), gzip / zip
+    compressed CSV, TSV, Excel (one sheet; `header_row` skips title rows),
+    Parquet and JSON (a records array or one record per line).
 
     Text-first is deliberate: pandas will happily read a postcode column as a
     float if it looks numeric enough, and a sum insured with a thousands comma
     as a string. Coercion happens once, in `apply_spec`, where it is visible.
     """
     p = Path(path)
-    suffix = p.suffix.lower()
-    if suffix in (".parquet", ".pq"):
+    if not p.exists():
+        raise FileNotFoundError(p)
+    inner, compression = _strip_compression(p)
+
+    if inner in (".parquet", ".pq"):
         return pd.read_parquet(p)
-    if suffix in (".xlsx", ".xls"):
-        return pd.read_excel(p, dtype=str)
-    sep = "\t" if suffix in (".tsv", ".tab") else ","
-    return pd.read_csv(p, dtype=str, sep=sep, low_memory=False)
+    if inner in _EXCEL_SUFFIXES:
+        return pd.read_excel(p, sheet_name=0 if sheet is None else sheet,
+                             header=header_row, dtype=str)
+    if inner == ".json":
+        try:
+            return pd.read_json(p, dtype=False, compression=compression or "infer")
+        except ValueError:
+            return pd.read_json(p, lines=True, dtype=False,
+                                compression=compression or "infer")
+
+    enc = encoding or "utf-8"
+    if delimiter is None:
+        try:
+            delimiter = _sniff_delimiter(p, compression, enc, inner)
+        except UnicodeDecodeError:
+            if encoding is not None:
+                raise
+            enc = "cp1252"
+            delimiter = _sniff_delimiter(p, compression, enc, inner)
+    kwargs = dict(dtype=str, sep=delimiter, low_memory=False, skiprows=header_row,
+                  compression=compression or "infer", encoding=enc)
+    try:
+        return pd.read_csv(p, **kwargs)
+    except UnicodeDecodeError:
+        if encoding is None and enc != "cp1252":
+            kwargs["encoding"] = "cp1252"
+            return pd.read_csv(p, **kwargs)
+        raise
+
+
+def expand_paths(paths) -> list:
+    """A path, a directory, a glob, or a list of any of those -> sorted files.
+
+    A directory means every data file directly inside it. Hidden files and the
+    `.NOTE.txt` sidecars the sample generator writes are skipped.
+    """
+    if isinstance(paths, (str, Path)):
+        paths = [paths]
+    out: list = []
+    for item in paths:
+        s = str(item)
+        p = Path(s)
+        if p.is_dir():
+            cand = [q for q in p.iterdir() if q.is_file()]
+        elif any(ch in s for ch in "*?["):
+            cand = [Path(q) for q in _glob.glob(s)]
+        else:
+            cand = [p]
+        for q in cand:
+            if q.name.startswith(".") or q.name.endswith(".NOTE.txt"):
+                continue
+            inner, _ = _strip_compression(q)
+            if inner in _TEXT_SUFFIXES + _EXCEL_SUFFIXES + (".parquet", ".pq", ".json"):
+                out.append(q)
+    seen, uniq = set(), []
+    for q in sorted(out):
+        if q.resolve() not in seen:
+            seen.add(q.resolve())
+            uniq.append(q)
+    return uniq
+
+
+def read_extracts(paths, *, spec: "VendorSpec | None" = None, **read_kwargs) -> pd.DataFrame:
+    """Read and stack every file `expand_paths()` finds.
+
+    Vendors deliver one file per day, week or month; this is how a folder of
+    them becomes one frame. A `source_file` column records where each row came
+    from, so a bad delivery can be traced and re-loaded. Files whose columns
+    differ are still stacked -- the mismatch is what `apply_spec` then reports
+    as missing columns, per file, rather than something to hide here.
+    """
+    if spec is not None:
+        read_kwargs = {
+            "sheet": spec.sheet, "header_row": spec.header_row,
+            "delimiter": spec.delimiter, "encoding": spec.encoding, **read_kwargs,
+        }
+    files = expand_paths(paths)
+    if not files:
+        raise FileNotFoundError(f"no data files found under {paths}")
+    frames = []
+    for f in files:
+        df = read_extract(f, **read_kwargs)
+        df = df.copy()
+        df["source_file"] = f.name
+        frames.append(df)
+    return pd.concat(frames, ignore_index=True, sort=False)
 
 
 # Keywords that suggest a canonical field, checked against the column name.
@@ -382,9 +707,11 @@ def profile_extract(source, *, max_samples: int = 5) -> pd.DataFrame:
     not assume a spec; it exists so mapping a new file takes minutes and so you
     see the cardinalities before deciding what is trustworthy.
     """
-    df = source if isinstance(source, pd.DataFrame) else read_extract(source)
+    df = source if isinstance(source, pd.DataFrame) else read_extracts(source)
     rows = []
     for col in df.columns:
+        if col == "source_file":
+            continue
         s = df[col]
         non_null = s.dropna()
         samples = [str(v) for v in non_null.unique()[:max_samples]]
@@ -400,23 +727,56 @@ def profile_extract(source, *, max_samples: int = 5) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def suggest_spec(source, *, name: str = "NewVendor") -> str:
-    """Emit a `VendorSpec(...)` you can paste and correct.
+def draft_spec(source, *, name: str = "NewVendor", source_tag: str | None = None) -> VendorSpec:
+    """A `VendorSpec` guessed from the file's column names, to be corrected.
 
-    Deliberately emits a *draft*, with the four undeclarable facts left at their
-    defaults and commented, because those must come from the vendor rather than
-    from the file.
+    The four undeclarable facts are left at their defaults, because those must
+    come from the vendor rather than from the file; `declines_included` stays
+    None so the audit says "unconfirmed" rather than trusting a default.
     """
     prof = profile_extract(source)
     mapped = prof.dropna(subset=["guessed_field"]).drop_duplicates("guessed_field")
+    columns = {r.guessed_field: r.column for _, r in mapped.iterrows()}
+    unmapped = prof[prof.guessed_field.isna()].column.tolist()
+    tag = source_tag or Source.vendor_ci.value
+    notes = (
+        "DRAFT written by profile_extract(); every column name below was "
+        "guessed from its header and must be checked against the vendor's "
+        "data dictionary. CONFIRM WITH THE VENDOR before loading: premium_basis, "
+        "premium_includes_ipt, declines_included, truncated_to_top_n."
+    )
+    if unmapped:
+        notes += f" Unmapped columns in the file: {unmapped}."
+    return VendorSpec(name=name, source=tag, columns=columns, notes=notes)
+
+
+def suggest_spec(source, *, name: str = "NewVendor", fmt: str = "python") -> str:
+    """Emit a draft spec you can paste and correct, as Python or as YAML.
+
+    `fmt="yaml"` is the form to save under `config/vendor_specs/`; `fmt="python"`
+    is the form to paste into this module. Both carry the same fields.
+    """
+    spec = draft_spec(source, name=name)
+    if fmt == "yaml":
+        head = (
+            "# Draft vendor spec -- guessed from column headers, not from vendor\n"
+            "# documentation. Correct the column names, then CONFIRM WITH THE\n"
+            "# VENDOR the four facts that cannot be read off the file:\n"
+            "#   premium_basis, premium_includes_ipt, declines_included,\n"
+            "#   truncated_to_top_n\n"
+            "# Load with: python scripts/inspect_vendor.py <file> --spec <this file>\n"
+        )
+        return head + spec.to_yaml()
+    if fmt != "python":
+        raise ValueError("fmt must be 'python' or 'yaml'")
     lines = [
-        f'VendorSpec(',
+        'VendorSpec(',
         f'    name="{name}",',
-        f'    source=Source.vendor_ci.value,        # or vendor_dfq',
-        f'    columns={{',
+        '    source=Source.vendor_ci.value,        # or vendor_ph / vendor_dfq',
+        '    columns={',
     ]
-    for _, r in mapped.iterrows():
-        lines.append(f'        "{r.guessed_field}": "{r.column}",')
+    for canon, col in spec.columns.items():
+        lines.append(f'        "{canon}": "{col}",')
     lines += [
         "    },",
         "    # CONFIRM THESE WITH THE VENDOR -- they cannot be read off the file:",
@@ -426,10 +786,72 @@ def suggest_spec(source, *, name: str = "NewVendor") -> str:
         "    truncated_to_top_n=None,",
         ")",
     ]
+    prof = profile_extract(source)
     unmapped = prof[prof.guessed_field.isna()].column.tolist()
     if unmapped:
         lines.append(f"# unmapped columns: {unmapped}")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# wide -> long
+# ---------------------------------------------------------------------------
+
+_WIDE_FIXED = ("source_file",)
+
+
+def melt_wide(df: pd.DataFrame, spec: VendorSpec):
+    """Turn a brands-across-the-columns table into one row per quote.
+
+    Returns `(long_df, problems)`. The brand columns are `spec.wide_brand_columns`
+    if given, else every column the spec does not map and does not ignore. The
+    premium lands in a column named by `spec.columns["premium"]` (default
+    "premium") and the brand in `spec.columns["brand"]` (default "brand"), so
+    the ordinary mapping applies afterwards.
+
+    A blank cell means what `spec.wide_blank_means` says: "absent" drops it,
+    "declined" keeps it as a non-quote. This is a declaration because the two
+    readings give different market prices and the file cannot tell you which.
+    """
+    problems: list = []
+    mapped = set(spec.columns.values())
+    ignore = set(spec.wide_ignore) | set(_WIDE_FIXED)
+    brand_cols = list(spec.wide_brand_columns) or [
+        c for c in df.columns if c not in mapped and c not in ignore
+    ]
+    missing = [c for c in brand_cols if c not in df.columns]
+    if missing:
+        problems.append(f"wide: {len(missing)} brand column(s) not in the file: {missing}")
+        brand_cols = [c for c in brand_cols if c in df.columns]
+    if not brand_cols:
+        return df.iloc[0:0].copy(), problems + ["wide: no brand columns found"]
+
+    id_cols = [c for c in df.columns if c not in brand_cols]
+    brand_col = spec.columns.get("brand", "brand")
+    prem_col = spec.columns.get("premium", "premium")
+    long = df.melt(id_vars=id_cols, value_vars=brand_cols,
+                   var_name=brand_col, value_name=prem_col)
+    blank = long[prem_col].isna() | (long[prem_col].astype(str).str.strip() == "")
+    if spec.wide_blank_means == "absent":
+        long = long[~blank]
+        problems.append(
+            f"wide: {int(blank.sum()):,} blank cells dropped as 'not on panel' "
+            "(wide_blank_means=absent)"
+        )
+    else:
+        quoted_col = spec.columns.get("quoted")
+        if not quoted_col:
+            raise ValueError(
+                "wide_blank_means='declined' needs columns['quoted'] to name the "
+                "status column the melt should create"
+            )
+        long[quoted_col] = np.where(blank, "declined", "quoted")
+        long.loc[blank, prem_col] = None
+        problems.append(
+            f"wide: {int(blank.sum()):,} blank cells read as declines "
+            "(wide_blank_means=declined)"
+        )
+    return long.reset_index(drop=True), problems
 
 
 # ---------------------------------------------------------------------------
@@ -451,8 +873,17 @@ def apply_spec(source, spec: VendorSpec, *, resolver: BrandResolver = None):
     reported; they are never coerced to a default, for the same reason an
     invented flood band is worse than a missing one.
     """
-    df = source if isinstance(source, pd.DataFrame) else read_extract(source)
+    df = source if isinstance(source, pd.DataFrame) else read_extracts(source, spec=spec)
     problems: list = []
+    if spec.layout == "wide":
+        df, wide_problems = melt_wide(df, spec)
+        problems += wide_problems
+        # The melt created brand and premium columns; make sure the mapping
+        # below picks them up even if the spec never named them.
+        cols = dict(spec.columns)
+        cols.setdefault("brand", "brand")
+        cols.setdefault("premium", "premium")
+        spec = replace(spec, columns=cols)
     out = pd.DataFrame(index=df.index)
 
     missing = [c for c in spec.columns.values() if c not in df.columns]
@@ -517,9 +948,25 @@ def apply_spec(source, spec: VendorSpec, *, resolver: BrandResolver = None):
         resolver = resolver or BrandResolver(aliases=spec.brand_aliases)
         out["brand_raw"] = out["brand"]
         out["brand"] = [resolver.resolve(v) for v in out["brand"]]
-        out["underwriter"] = [
-            resolver.underwriter.get(b) if b else None for b in out["brand"]
-        ]
+        # The config's underwriter is the pricing group and wins; a vendor's
+        # own underwriter column (often the legal carrier) is kept alongside
+        # and any disagreement is reported rather than silently overwritten.
+        if "underwriter" in out.columns:
+            out["underwriter_raw"] = out["underwriter"]
+        from_config = [resolver.underwriter.get(b) if b else None for b in out["brand"]]
+        if "underwriter_raw" in out.columns:
+            raw = out["underwriter_raw"]
+            differs = int(sum(
+                1 for r, c in zip(raw, from_config)
+                if pd.notna(r) and c and _brand_key(r) != _brand_key(c)
+            ))
+            if differs:
+                problems.append(
+                    f"underwriter: {differs:,} row(s) where the file's underwriter "
+                    "differs from providers.yml; the config's pricing group was "
+                    "kept and the file's value is in underwriter_raw"
+                )
+        out["underwriter"] = from_config
         if resolver.unresolved:
             problems.append(
                 f"{len(resolver.unresolved)} unrecognised brand(s): "
@@ -535,7 +982,7 @@ def apply_spec(source, spec: VendorSpec, *, resolver: BrandResolver = None):
     mapped = set(spec.columns.values())
     overlooked = []
     for col in df.columns:
-        if col in mapped:
+        if col in mapped or col == "source_file":
             continue
         guess = _guess_field(col)
         if guess and guess not in spec.columns:
@@ -573,6 +1020,8 @@ def apply_spec(source, spec: VendorSpec, *, resolver: BrandResolver = None):
             )
     out["quoted"] = out["quoted"].astype(bool)
     out["source"] = spec.source
+    if "source_file" in df.columns:
+        out["source_file"] = df["source_file"].to_numpy()
     return out, problems
 
 
@@ -928,12 +1377,13 @@ def _drop_nulls(rec: dict) -> dict:
 def load_vendor_extract(path, spec, *, validate: bool = True):
     """Read, map, audit and validate in one call.
 
-    Returns `(risks, quotes, findings, problems)`. Nothing is written and
-    nothing is dropped silently -- if the audit returns a BLOCKER, the records
-    still come back so you can look at them, but you should not train on them.
+    `path` may be one file, a directory, a glob or a list; `spec` a built-in
+    name, a path to a YAML spec, or a `VendorSpec`. Returns
+    `(risks, quotes, findings, problems)`. Nothing is written and nothing is
+    dropped silently -- if the audit returns a BLOCKER, the records still come
+    back so you can look at them, but you should not train on them.
     """
-    if isinstance(spec, str):
-        spec = SPECS[spec]
+    spec = load_spec(spec)
     canonical, problems = apply_spec(path, spec)
     findings = audit_extract(canonical, spec)
     risks, quotes, more = to_records(canonical, validate=validate)

@@ -67,7 +67,8 @@ class Source(str, Enum):
 
     manual = "manual"          # self-collected, real customer identity
     vendor_ci = "vendor_ci"    # Consumer Intelligence extract
-    vendor_dfq = "vendor_dfq"  # Defaqto Market Pricing extract
+    vendor_dfq = "vendor_dfq"  # Defaqto Market Pricing extract (ex Pearson Ham, from 2026)
+    vendor_ph = "vendor_ph"    # historic Pearson Ham raw files (pre-2026)
     synthetic = "synthetic"    # generated for pipeline testing only
 
 

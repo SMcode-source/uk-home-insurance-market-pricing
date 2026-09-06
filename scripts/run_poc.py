@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from mktpricing.collect.synthetic import generate  # noqa: E402
+from mktpricing.evaluate.adequacy import assess  # noqa: E402
 from mktpricing.evaluate.compare import (  # noqa: E402
     additivity_gap, first_holdout_week_is_identical, format_leaderboard,
     residual_profile, rolling_comparison, run_comparison,
@@ -121,6 +122,35 @@ def main() -> int:
           f"premium GBP {np.exp(df.log_premium).min():.0f}"
           f"-{np.exp(df.log_premium).max():.0f}")
 
+    # -- 1b. what the data can support ------------------------------------
+    # Decided from the data, before any fit, and printed with reasons. On a
+    # hand-collected single-property panel every risk feature is a constant:
+    # a rating model would fit the mean and rank the leaderboard by noise, and
+    # a spatial split would hold out the only postcode area there is. Neither
+    # crashes, both look plausible, so the harness does not get to decide.
+    _rule("1b. DATA ADEQUACY  (what this data can and cannot answer)")
+    adequacy = assess(df, holdout_weeks=args.weeks_holdout)
+    print(adequacy.format())
+    (args.out / "adequacy.json").write_text(
+        json.dumps(
+            {"tier": adequacy.tier, "n_risks": adequacy.n_risks,
+             "n_weeks": adequacy.n_weeks, "n_areas": adequacy.n_areas,
+             "spatial_split": adequacy.spatial_split_possible,
+             "constant_features": adequacy.constant_features,
+             "excluded": adequacy.excluded, "eligible": adequacy.eligible},
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    if not adequacy.temporal_split_possible:
+        print("\n  nothing can be scored out of sample. Collect more weeks first.")
+        return 2
+    only = adequacy.restrict(args.only)
+    if args.only and adequacy.excluded:
+        print("\n  --only was given, so the exclusions above are NOT applied. Read")
+        print("  the result with them in mind.")
+    lineup = {n.strip() for spec in only for n in str(spec).split(",") if n.strip()}
+
     # -- 2. approach comparison -------------------------------------------
     _rule("2. APPROACH COMPARISON  (held-out; never random-split)")
     skipped = unavailable_approaches()
@@ -147,7 +177,8 @@ def main() -> int:
 
     leaderboard, preds, _ = run_comparison(
         df, holdout_weeks=args.weeks_holdout, k=args.k,
-        only=args.only, verbose=True, on_split_done=_persist_split,
+        only=only, verbose=True, on_split_done=_persist_split,
+        spatial=adequacy.spatial_split_possible,
     )
     table = format_leaderboard(leaderboard, k=args.k)
     print("\n  LEADERBOARD (sorted by MdAPE within split)\n")
@@ -169,7 +200,7 @@ def main() -> int:
     # -- 3b. blind vs weekly refresh ---------------------------------------
     _rule("3b. BLIND VS WEEKLY REFRESH  (the operating mode, not just the test)")
     roll, roll_brand, roll_week, roll_brand_week, _ = rolling_comparison(
-        df, holdout_weeks=args.weeks_holdout, only=args.only, verbose=True,
+        df, holdout_weeks=args.weeks_holdout, only=only, verbose=True,
     )
     if roll.empty:
         print("  no approach in this run supports recalibration.")
@@ -207,7 +238,12 @@ def main() -> int:
         # Why the worst brand is worst. A residual that is ~0 through every
         # training week and jumps the week the data ends is a reprice, not an
         # under-fit, and no estimator work recovers it.
-        prof = residual_profile(df, holdout_weeks=args.weeks_holdout)
+        # Profiled with the approach the diagnostic was written for. When the
+        # data cannot support it, say so rather than fitting it anyway.
+        prof = (residual_profile(df, holdout_weeks=args.weeks_holdout)
+                if "gbm_per_brand_trend" in lineup else pd.DataFrame())
+        if prof.empty and "gbm_per_brand_trend" not in lineup:
+            print("\n  residual profile skipped: gbm_per_brand_trend is not in this lineup.")
         if not prof.empty:
             prof.to_csv(args.out / "residual_by_week.csv", index=False)
             head = worst[0]

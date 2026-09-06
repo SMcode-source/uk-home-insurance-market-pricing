@@ -48,10 +48,16 @@ def run_comparison(
     only=None,
     verbose: bool = True,
     on_split_done=None,
+    spatial: bool = True,
 ):
     """Evaluate every available approach on both splits.
 
     Returns (leaderboard, predictions, skipped).
+
+    `spatial=False` runs the temporal split alone. A hand-collected panel has
+    one postcode area, and holding it out empties the training set -- every
+    approach then fails and the leaderboard reads as if the models were broken
+    rather than the question unaskable. `evaluate.adequacy.assess` decides.
 
     `on_split_done(split_name, leaderboard_so_far, predictions_so_far)` is
     called after each split finishes, so a caller can persist partial results.
@@ -92,10 +98,13 @@ def run_comparison(
 
     splits = {}
     splits["temporal"] = temporal_split(df, holdout_weeks=holdout_weeks)
-    tr, te, held = spatial_split(df, holdout_frac=spatial_frac)
-    splits["spatial"] = (tr, te)
-    if verbose:
-        print(f"  spatial holdout areas: {', '.join(held)}")
+    if spatial:
+        tr, te, held = spatial_split(df, holdout_frac=spatial_frac)
+        splits["spatial"] = (tr, te)
+        if verbose:
+            print(f"  spatial holdout areas: {', '.join(held)}")
+    elif verbose:
+        print("  spatial split skipped: the data has too few postcode areas to hold one out")
 
     rows, preds = [], []
 

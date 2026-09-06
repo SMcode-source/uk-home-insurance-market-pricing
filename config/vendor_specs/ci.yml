@@ -1,0 +1,72 @@
+# Consumer Intelligence -- Home Insurance Market View / Underwriter View.
+#
+# PROVISIONAL. No real extract has been profiled; every column name below is a
+# guess from published vendor terminology (CI publishes no data dictionary).
+# When the first file lands:
+#   python scripts/inspect_vendor.py <file-or-folder>          # profile it
+#   edit this file so `columns` names the real headers
+#   python scripts/inspect_vendor.py <file-or-folder> --spec ci --geo data/geo --write
+# CI's raw data is "Excel spreadsheets": set `sheet` and `header_row` if the
+# workbook has a title row or several tabs. Underwriter View adds an underwriter
+# column (MoneySuperMarket only); add `underwriter: <its header>` under columns.
+# docs/VENDOR-EXTRACTS.md records what CI is known to deliver and the questions
+# to ask before the first file. The four facts under "declared" cannot be read
+# off the file and must come from CI in writing.
+name: Consumer Intelligence
+source: vendor_ci
+columns:
+  risk_id: QuoteReference
+  brand: Brand
+  channel: Channel
+  collected_on: QuoteDate
+  premium: AnnualPremium
+  quoted: Status
+  rank_on_page: Rank
+  postcode: Postcode
+  policy_type: CoverType
+  building_type: PropertyType
+  construction: ConstructionType
+  occupancy: OccupancyType
+  year_built: YearBuilt
+  bedrooms: Bedrooms
+  buildings_sum_insured: BuildingsSumInsured
+  contents_sum_insured: ContentsSumInsured
+  voluntary_excess: VoluntaryExcess
+  compulsory_excess: CompulsoryExcess
+  claims_last_5y: ClaimsCount
+  accidental_damage: AccidentalDamage
+values: {}
+brand_aliases: {}
+premium_basis: annual
+premium_includes_ipt: true
+declines_included: null
+truncated_to_top_n: null
+channel_default: null
+date_format: null
+dayfirst: true
+sheet: null
+header_row: 0
+delimiter: null
+encoding: null
+layout: long
+wide_brand_columns: []
+wide_ignore: []
+wide_blank_means: absent
+notes: 'Provisional. Home Insurance Market View states its content as the annual price
+  and, where relevant, compulsory and voluntary excess for each insurer on the market,
+  plus ranking; raw data is delivered as Excel spreadsheets, weekly or monthly, across
+  the four PCWs and 32-34 direct sites. Voluntary excess is set per profile, so it
+  lives on the risk. Underwriter View adds the underwriter (from MoneySuperMarket
+  only): map its column to `underwriter` when that product is licensed. IPT, decline
+  rows and truncation are unconfirmed. Column names are guesses until a file has been
+  profiled. docs/VENDOR-EXTRACTS.md.'
+
+# ---- declared, never inferred -------------------------------------------
+# premium_basis:        "annual" or "monthly" -- the file's own basis
+# premium_includes_ipt: true if the premium already carries 12% IPT
+# declines_included:    true / false; null = not yet confirmed by the vendor
+# truncated_to_top_n:   null unless the vendor supplies only the cheapest N
+# ---- layout -----------------------------------------------------------------
+# sheet / header_row:   Excel workbooks -- which tab, how many title rows
+# delimiter / encoding: CSV -- null means sniff / utf-8 then cp1252
+# layout: wide          one column per brand; see collect/vendor.py melt_wide()

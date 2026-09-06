@@ -112,7 +112,8 @@ def test_alias_overrides_resolve():
 
 def test_underwriter_is_attached_from_the_config():
     r = BrandResolver()
-    assert r.underwriter["Churchill"] == "Direct Line Group"
+    # Direct Line Group has been Aviva's since 1 July 2025 (docs/DATA-SOURCES.md).
+    assert r.underwriter["Churchill"] == "Aviva"
 
 
 # -- value maps ------------------------------------------------------------

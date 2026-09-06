@@ -232,3 +232,170 @@ def coverage_report(rows, expected_brands, expected_channels):
             }
         )
     return report
+
+
+# ---------------------------------------------------------------------------
+# the risk itself, and the path from a filled-in grid to the canonical tables
+# ---------------------------------------------------------------------------
+#
+# A session grid records what each brand said. It does not record what was
+# asked -- the property, cover and excess the collector actually entered. That
+# lives in a risk definition file, one entry per risk_id, validated through the
+# same `schema.Risk` a vendor extract's rows pass through. Without it the
+# quotes are premiums with no risk attached, which supports benchmarking and
+# nothing else (the `no_risk_attributes` BLOCKER in `vendor.audit_extract`).
+
+RISK_TEMPLATE = """\
+# Risk definitions for manual collection: one entry per risk_id in your grids.
+#
+# Every value is what you actually told the insurers. Rating facts must be
+# genuine -- see the identity policy at the top of collect/session.py. A
+# different voluntary excess, cover type or sum insured is a DIFFERENT risk:
+# give it its own risk_id (MY-HOUSE-EXC500) rather than editing this one.
+#
+# This file describes a real property. It lives in data/raw/, which is
+# gitignored, and stays there. Fields left blank fail validation on purpose.
+#
+# Values (schema.py):
+#   policy_type    buildings | contents | combined
+#   building_type  detached | semi_detached | terraced | end_terrace | flat | bungalow
+#   construction   standard | non_standard_walls | non_standard_roof | listed
+#   occupancy      owner_occupied | let | second_home | unoccupied
+risks:
+{entries}"""
+
+_RISK_ENTRY = """\
+  - risk_id: {risk_id}
+    postcode:                    # full postcode, e.g. "BS1 4DJ"
+    policy_type:
+    building_type:
+    construction: standard       # change if not
+    occupancy: owner_occupied    # change if not
+    year_built:
+    bedrooms:
+    buildings_sum_insured:       # blank if contents-only
+    contents_sum_insured:        # blank if buildings-only
+    voluntary_excess:
+    claims_last_5y: 0
+    flood_history: false
+    subsidence_history: false
+    in_basket: true              # re-quoted every cycle, so part of the index basket
+"""
+
+
+def write_risk_template(path, risk_ids) -> Path:
+    """Write a risk definition skeleton to fill in by hand.
+
+    Required fields are left blank rather than given plausible defaults, so an
+    unfilled entry fails validation instead of quietly describing a property
+    nobody quoted.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    entries = "".join(_RISK_ENTRY.format(risk_id=r) for r in risk_ids)
+    path.write_text(RISK_TEMPLATE.format(entries=entries), encoding="utf-8")
+    return path
+
+
+def read_risk_definitions(path):
+    """Read a risk definition file into `(risks, problems)`.
+
+    Each entry is validated as a `schema.Risk`; an entry that fails is
+    reported and left out, never patched with a default.
+    """
+    import pandas as pd
+    import yaml
+
+    from ..schema import RISK_COLUMNS, Risk
+
+    spec = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    entries = spec.get("risks") or []
+    good, problems, seen = [], [], set()
+    for i, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict):
+            problems.append(f"risk #{i}: not a mapping")
+            continue
+        rid = entry.get("risk_id")
+        if rid in seen:
+            problems.append(f"risk {rid!r}: defined twice")
+            continue
+        clean = {k: v for k, v in entry.items() if v not in (None, "")}
+        try:
+            # mode="json" gives plain strings for the enums, matching what the
+            # vendor path writes to parquet.
+            good.append(Risk(**clean).model_dump(mode="json"))
+            seen.add(rid)
+        except Exception as exc:
+            problems.append(f"risk {rid!r}: {exc}")
+    risks = pd.DataFrame(good, columns=RISK_COLUMNS) if not good else pd.DataFrame(good)
+    return risks, problems
+
+
+def session_to_canonical(rows, risks, *, resolver=None):
+    """Filled-in session rows plus risk definitions -> `(quotes, problems)`.
+
+    Brands resolve against `config/providers.yml` exactly as a vendor extract's
+    do, so "Direct Line Insurance" and "Direct Line" are one brand here too,
+    and a brand the config does not know is reported, never guessed. A row
+    whose `risk_id` has no definition is reported and dropped: a premium with
+    no risk attached cannot train anything.
+    """
+    import pandas as pd
+
+    from ..schema import QUOTE_COLUMNS, Quote
+    from .vendor import BrandResolver
+
+    resolver = resolver or BrandResolver()
+    known = set(risks["risk_id"]) if len(risks) else set()
+    good, problems = [], []
+    for r in rows:
+        rec = dict(r)
+        rid, raw_brand = rec.get("risk_id"), rec.get("brand")
+        if rid not in known:
+            problems.append(
+                f"{rid}/{raw_brand}: risk_id has no entry in the risk definitions"
+            )
+            continue
+        brand = resolver.resolve(raw_brand)
+        if brand is None:
+            problems.append(
+                f"{rid}/{raw_brand!r}: brand not in providers.yml -- add it there "
+                "or correct the spelling"
+            )
+            continue
+        rec["brand"] = brand
+        rec["underwriter"] = resolver.underwriter.get(brand)
+        clean = {k: v for k, v in rec.items() if v is not None}
+        try:
+            good.append(Quote(**clean).model_dump(mode="json"))
+        except Exception as exc:
+            problems.append(f"{rid}/{brand}: {exc}")
+
+    quotes = pd.DataFrame(good, columns=QUOTE_COLUMNS) if not good else pd.DataFrame(good)
+    if len(quotes):
+        quotes["collected_on"] = pd.to_datetime(quotes["collected_on"]).dt.date
+    return quotes, problems
+
+
+QUOTE_KEY = ["risk_id", "brand", "channel", "collected_on"]
+
+
+def append_quotes(existing, new):
+    """Add a session's quotes to what has already been ingested.
+
+    Rows sharing `(risk_id, brand, channel, collected_on)` are replaced by the
+    new ones, so a corrected grid can simply be re-ingested. Returns
+    `(merged, n_replaced)`.
+    """
+    import pandas as pd
+
+    if existing is None or len(existing) == 0:
+        return new.reset_index(drop=True), 0
+    if len(new) == 0:
+        return existing.reset_index(drop=True), 0
+    key_new = set(map(tuple, new[QUOTE_KEY].astype(str).to_numpy()))
+    old_keys = list(map(tuple, existing[QUOTE_KEY].astype(str).to_numpy()))
+    keep = [k not in key_new for k in old_keys]
+    n_replaced = int(len(keep) - sum(keep))
+    merged = pd.concat([existing[keep], new], ignore_index=True)
+    return merged, n_replaced

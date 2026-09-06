@@ -75,6 +75,103 @@ class BrandGeoMean(Approach):
 
 
 @register
+class BrandLastLevel(Approach):
+    """Last observed level per brand and channel, carried forward.
+
+    The naive forecast, and on a thin panel the right one. When a single real
+    property is quoted weekly, no risk feature varies and the only thing there
+    is to learn is each brand's price level on each channel over time. For a
+    level that wanders rather than marches -- which is what insurance pricing
+    does -- the optimal forecast at every horizon is the last value.
+
+    It reads the median log-premium of the final training week per (brand,
+    channel), falling back to the brand's final week and then to the market's.
+    `recalibrate` replaces those levels with the newly observed week, so under
+    weekly refresh it is exactly "price what you saw last week" -- which is the
+    operating assumption `TrendAdjusted.recalibrate` exists to model, stripped
+    of the rating model it normally sits on.
+
+    `week` and the one-hot `channel_*` columns must be present in X, which
+    `features.build.design_matrix` guarantees.
+    """
+
+    name = "brand_last_level"
+    blurb = "Last observed level per brand and channel, carried forward. The thin-panel baseline."
+    requires = ()
+    week_col = "week"
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self._by_key: dict = {}
+        self._by_brand: dict = {}
+        self._market = 0.0
+        self.as_of_week = None
+
+    @staticmethod
+    def _channels(X: pd.DataFrame) -> np.ndarray:
+        cols = [c for c in X.columns if str(c).startswith("channel_")]
+        if not cols:
+            return np.full(len(X), "", dtype=object)
+        block = X[cols].to_numpy(dtype=float)
+        idx = block.argmax(axis=1)
+        names = np.array([str(c)[len("channel_"):] for c in cols], dtype=object)
+        out = names[idx]
+        out[block.max(axis=1) <= 0] = ""  # no channel column set
+        return out
+
+    def _observe(self, X, y, groups):
+        X = pd.DataFrame(X)
+        if self.week_col not in X.columns:
+            raise KeyError(
+                f"{self.name} needs a `{self.week_col}` column; build the matrix "
+                "with features.build.design_matrix"
+            )
+        obs = pd.DataFrame({
+            "brand": np.asarray(groups).astype(str),
+            "channel": self._channels(X),
+            "week": X[self.week_col].to_numpy(dtype=float),
+            "y": np.asarray(y, dtype=float),
+        })
+        last = obs[obs.week == obs.week.max()]
+        self._market = float(np.median(last.y))
+        self._by_brand.update(last.groupby("brand").y.median().to_dict())
+        self._by_key.update(
+            {k: float(v) for k, v in last.groupby(["brand", "channel"]).y.median().items()}
+        )
+        self.as_of_week = float(last.week.max())
+
+    def fit(self, X, y, groups=None):
+        if groups is None:
+            raise ValueError(f"{self.name} needs `groups` (brand labels)")
+        self._by_key, self._by_brand = {}, {}
+        self._observe(X, y, groups)
+        return self
+
+    def predict(self, X, groups=None):
+        X = pd.DataFrame(X)
+        if groups is None:
+            return np.full(len(X), self._market, dtype=float)
+        g = np.asarray(groups).astype(str)
+        ch = self._channels(X)
+        return np.array(
+            [
+                self._by_key.get((b, c), self._by_brand.get(b, self._market))
+                for b, c in zip(g, ch)
+            ],
+            dtype=float,
+        )
+
+    def recalibrate(self, X, y, groups):
+        """Replace the carried level with the week just observed.
+
+        Never call it on rows you then score: that is scoring on the training
+        set with extra steps. The harness scores a week, then recalibrates.
+        """
+        self._observe(X, y, groups)
+        return self
+
+
+@register
 class RidgeLog(Approach):
     """Closed-form ridge on log-premium, implemented in numpy.
 

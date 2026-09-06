@@ -11,6 +11,12 @@
 # tier: 1 = core weekly collection, 2 = monthly, 3 = opportunistic.
 # Verify underwriter attributions before relying on them commercially; panel
 # arrangements change and are not always publicly disclosed.
+#
+# `underwriter` is the group that sets the price, not necessarily the legal
+# carrier on the policy: Direct Line, Churchill and Privilege are still written
+# by U K Insurance Limited but have been Aviva's since 1 July 2025. Ownership,
+# channels and PCW presence for the first ten brands were verified against
+# primary sources on 2026-09-06; docs/DATA-SOURCES.md has the citations.
 
 brands:
   - name: Aviva
@@ -22,39 +28,52 @@ brands:
     channels: [direct, pcw]
     tier: 1
   - name: Direct Line
-    underwriter: Direct Line Group
+    underwriter: Aviva
     channels: [direct, pcw]
     tier: 1
-    notes: Historically absent from PCWs; verify current panel presence.
+    notes: >-
+      Aviva-owned since 1 July 2025; carrier still U K Insurance Limited pending
+      a Part VII transfer. Home went on PCWs for the first time on 3 Sep 2026
+      (Confused.com first, others from late September), with PCW-specific tiers
+      -- so a PCW quote and a direct quote may not be the same product.
   - name: Churchill
-    underwriter: Direct Line Group
+    underwriter: Aviva
     channels: [direct, pcw]
     tier: 1
+    notes: Aviva-owned since 1 July 2025 via Direct Line Group; carrier U K Insurance Limited.
   - name: Privilege
-    underwriter: Direct Line Group
-    channels: [pcw]
+    underwriter: Aviva
+    channels: [direct, pcw]
     tier: 2
-  - name: Darwin
-    underwriter: Direct Line Group
-    channels: [pcw]
-    tier: 2
+    notes: Sells direct online as well as on PCWs. Aviva-owned via Direct Line Group.
+  # Darwin (Direct Line Group, now Aviva) sells car insurance only and is not a
+  # home brand. Removed 2026-09-06; it had no home price to collect.
   - name: Admiral
     underwriter: Admiral
     channels: [direct, pcw]
     tier: 1
+    notes: Trading name of EUI Limited, the FCA reporting firm for Admiral and More Than home.
   - name: More Than
     underwriter: Admiral
-    channels: [direct, pcw]
-    tier: 2
-    notes: RSA UK personal lines moved to Admiral; confirm current status.
-  - name: LV=
-    underwriter: LV= General Insurance
-    channels: [direct, pcw]
-    tier: 1
-  - name: Ageas
-    underwriter: Ageas
     channels: [pcw]
     tier: 2
+    notes: >-
+      Admiral's since 2 April 2024 (RSA UK direct home and pet). Its own site
+      says home is sold only through price comparison websites; no direct channel.
+  - name: LV=
+    underwriter: Allianz
+    channels: [direct, pcw]
+    tier: 1
+    notes: >-
+      LV= General Insurance has been Allianz's since 2019; the brand is licensed
+      from the mutual under a partnership renewed 24 April 2026. Carrier is
+      Liverpool Victoria Insurance Company Ltd until a planned transfer to
+      Allianz Insurance plc on 1 Jan 2027.
+  - name: Ageas
+    underwriter: Ageas
+    channels: [direct, pcw]
+    tier: 2
+    notes: Sells direct online as well as on PCWs. Owns esure since 29 Sep 2025.
   - name: Policy Expert
     underwriter: Policy Expert
     channels: [direct, pcw]
@@ -95,9 +114,10 @@ brands:
     channels: [direct, pcw]
     tier: 3
   - name: Esure
-    underwriter: Esure
+    underwriter: Ageas
     channels: [pcw]
     tier: 2
+    notes: Acquired by Ageas UK, completed 29 Sep 2025; runs as a separate business within Ageas UK.
 
 channels:
   - id: direct

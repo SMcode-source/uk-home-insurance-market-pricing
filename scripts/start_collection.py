@@ -39,7 +39,9 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from mktpricing.collect.session import ChannelAlias, CollectionSession  # noqa: E402
+from mktpricing.collect.session import (  # noqa: E402
+    ChannelAlias, CollectionSession, write_risk_template,
+)
 
 
 def load_brands(config: Path, channel_kinds, tiers):
@@ -107,6 +109,15 @@ def main() -> int:
 
     path = session.write_template(args.out / f"{session_id}.csv")
 
+    # The grid records what each brand said. What was *asked* -- the property,
+    # cover and excess actually entered -- lives in the risk file, one entry
+    # per risk_id. Without it the quotes are premiums with no risk attached.
+    risk_file = args.out / "risks.yml"
+    risk_file_written = False
+    if not risk_file.exists():
+        write_risk_template(risk_file, args.risk)
+        risk_file_written = True
+
     print(f"session {session_id}   {today.isoformat()}")
     print(f"  identity_ref  {args.identity}  (the identity itself stays out of this repo)")
     print(f"  risks         {', '.join(args.risk)}")
@@ -131,11 +142,15 @@ def main() -> int:
         print("  This is the coverage gap. A PCW-only dataset cannot close it,")
         print("  and pretending the panel is the market biases the index.")
 
+    if risk_file_written:
+        print(f"\n  risk definitions -> {risk_file}  (new; describe the property there)")
+    else:
+        print(f"\n  risk definitions: {risk_file}  (exists; add any new risk_id to it)")
+
     print("\n  Fill in `quoted` and `premium` for every row. Leave a row blank")
     print("  only if you could not complete the journey -- a refusal to quote is")
-    print("  quoted=false, which is signal, not a gap. Then:")
-    print("\n    from mktpricing.collect.session import read_session, coverage_report")
-    print(f"    rows, problems = read_session(r'{path}')")
+    print("  quoted=false, which is signal, not a gap. Then ingest the grid:")
+    print(f"\n    python scripts/ingest_session.py {path} --risks {risk_file} --geo data/geo")
     return 0
 
 
