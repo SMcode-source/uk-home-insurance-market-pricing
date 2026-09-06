@@ -356,6 +356,101 @@ being able to see the future, and it is the right place for it to sit.
 The rule this generalises to: when the residual is flat in-sample and jumps the
 week the data ends, stop tuning the estimator and go and get the next week.
 
+---
+
+## 16. The data decides the lineup, before anything is fitted
+
+The harness is deliberately rigid: every approach, identical inputs, identical
+splits. That is correct on a vendor extract and wrong on the only data this
+project can collect without a licence -- one real property quoted weekly -- for
+two reasons that do not announce themselves.
+
+First, every risk feature is a constant. A rating model fitted to it has
+nothing to learn about the risk, so it fits the mean and the leaderboard ranks
+twelve approaches by noise. Second, there is one postcode area, and
+`spatial_split` holds out at least one, so the training set is empty and every
+approach reports FAILED -- which reads as broken models rather than an
+unaskable question.
+
+Neither crashes. Both produce plausible output. So `evaluate/adequacy.py`
+inspects the model matrix once, before any fit, and classifies it:
+
+| tier | what varies | consequence |
+|---|---|---|
+| `level_only` | nothing about the risk | only a price level per brand and channel over time is estimable; rating models are excluded, each with the reason printed |
+| `thin` | risk features, over fewer than 30 distinct risks | everything runs, with the warning that shape functions will be noise and every brand falls to the pooled fallback |
+| `cross_section` | enough risks to compare rating models | the full lineup |
+
+It also decides whether the spatial split can be asked at all, and whether
+there are more weeks than the holdout. The runner prints the report, writes it
+as `adequacy.json`, and passes the eligible lineup to the harness. An explicit
+`--only` overrides the exclusion and the runner says so: someone naming an
+approach on thin data is running an experiment, and the tool should not stop
+them, only make sure they know.
+
+The rule is the same one the registry already follows for missing libraries:
+excluded with a reason, never silently dropped.
+
+`brand_last_level` exists because the `level_only` tier needed a model that is
+right for it. The naive forecast -- last observed level per brand and channel,
+carried forward, replaced by `recalibrate()` each week -- is the optimal
+forecast of a level that wanders rather than marches, which is what §14 found
+insurance pricing does. On an eight-week single-property test panel it scores
+2.41% MdAPE blind against `brand_geomean`'s 5.24%, and 1.44% under weekly
+refresh. On the rotating synthetic cross-section it *loses* (43.64 vs 42.31),
+and should: last week's brand median there is confounded with last week's mix,
+which is precisely why §14 reads the level off residuals rather than weekly
+means. It is a baseline for fixed panels and is labelled as one.
+
+---
+
+## 17. The observed market price is arithmetic, and the definitions are the design
+
+`market/simulate.py` derives a market price from predictions, for risks nobody
+quoted. A vendor extract answers an easier question for the risks it did quote:
+what was the market that day? `market/observed.py` computes it with no model in
+the loop, and every choice in it is one a plausible alternative would silently
+change.
+
+**Each brand once.** A brand quoted on four PCWs and direct is one brand at its
+cheapest channel, not five entries. Without the collapse, "the five cheapest
+brands" becomes "the five cheapest quotes", which on a well-distributed brand is
+two providers. The channel that won is kept, because per brand it is the only
+measurement of the direct-versus-PCW gap that published material never gives.
+
+**Best price** is the cheapest of those. **Top-k market price** is the mean of
+the k cheapest brands, k=5 by default: the page-one experience, not the long
+tail. The median and the k-th price travel with it, because a mean of five
+hides one outlier at the top.
+
+**Spread** is the k-th price minus the best, in GBP and as a share of the best.
+It is the range of the competitive front: tight when the leaders price the risk
+alike, wide when at least one does not. The panel-wide spread (dearest over
+cheapest) is reported separately and is a different, noisier quantity, since a
+specialist quoting a mainstream risk at three times the market widens it
+without saying anything about competition. Conflating the two is the common
+error and the reason both are named.
+
+**Declines are counted, never priced.** A refusal lowers `n_quoting` and is
+absent from the ranking; it does not get an imputed premium, and a vendor's
+placeholder zero on a declined row is cleared before ranking rather than
+winning every top five. Fewer than k brands quoting yields a mean over what
+there is, flagged `top{k}_complete = False`, never padded.
+
+**Periods are declared.** Vendors deliver daily, an index wants weeks, and a
+risk quoted on Monday and Thursday of the same week must be one observation at
+its cheaper price rather than two. `period="day" | "week" | "month"` makes the
+bucketing explicit. The index across periods follows §12 exactly: declared
+basket first, then the risks present in every period labelled as derived, then
+no index on a panel that rotates completely, because Defaqto's panel rotates by
+design and week-on-week movement on it is composition.
+
+The per-brand table that falls out (quote rate, share of risk-periods cheapest,
+share in the top k, median gap to the leader and to the top-k mean) is the
+benchmark a "we price to market" claim can be checked against, and it needs no
+model either. The modelled market price from §9 and this observed one should
+agree on the holdout; `topN_price_err` in the harness is that comparison.
+
 ## Known limitations
 
 **No real quote has ever been collected.** Every number this repo has produced,

@@ -109,10 +109,16 @@ questions the simulator is actually guessing at.
    often 20-40%, and would show up as an enormous brand-level loading.
 6. **Declined is not missing.** `quoted=n` is market signal; a blank row is a
    collection gap. The template is pre-filled so the difference stays visible.
-7. **Brands are not independent.** Churchill, Privilege, Darwin and Direct Line
-   are one group; Admiral, Diamond and Elephant likewise. Four correlated brands
-   are not four observations, and a group-wide reprice will look like four
-   confirmations of the same move.
+7. **Brands are not independent.** Aviva, Direct Line, Churchill and Privilege
+   are one group since July 2025; Admiral and More Than likewise; Ageas, Saga
+   and esure likewise; LV= is Allianz. Four correlated brands are not four
+   observations, and a group-wide reprice will look like four confirmations of
+   the same move. `config/providers.yml` carries the groupings, with the
+   citations in `docs/DATA-SOURCES.md`.
+8. **A PCW product is not always the direct product.** Direct Line's PCW home
+   launch (September 2026) uses PCW-specific tiers. A channel gap measured
+   between two different products is a product gap wearing a channel's name;
+   check the cover before reading the pair as a channel effect.
 
 ## Mechanics
 
@@ -120,12 +126,28 @@ questions the simulator is actually guessing at.
         --channels pcw_ctm pcw_msm pcw_gocompare direct \
         --tier 1 --alias-domain you@example.com
 
-Writes a pre-filled grid to `data/raw/<session>.csv`. Fill in `quoted` and
-`premium` for every row; use `collector_note` for anything the columns do not
-hold. Then:
+Writes a pre-filled grid to `data/raw/<session>.csv`, and on the first run a
+risk skeleton to `data/raw/risks.yml`. The grid records what each brand said;
+the risk file records what you asked -- postcode, cover, sums insured, excess,
+property facts -- one entry per `risk_id`. Its required fields are blank on
+purpose and fail validation until filled, so nothing can be modelled against a
+property you did not describe. Fill in `quoted` and `premium` for every grid
+row; use `collector_note` for anything the columns do not hold. Then:
 
-    from mktpricing.collect.session import read_session
-    rows, problems = read_session("data/raw/2026-W36.csv")
+    python scripts/ingest_session.py data/raw/2026-W36.csv \
+        --risks data/raw/risks.yml --geo data/geo
+
+validates every row through the schema, resolves brands against
+`config/providers.yml`, prints the coverage report (quoted / declined /
+MISSING), appends to `data/processed/manual/`, geo-enriches the risk and says
+what the data can now support. Week two is the same command with the new
+file; a corrected grid re-ingested replaces its rows rather than duplicating
+them. Without `--geo` the output is written but not model-ready, and it says so.
+
+Expect the adequacy report to say `level_only`. One property means every risk
+feature is a constant, so the run compares the level models
+(`brand_geomean`, `brand_last_level`) and excludes the rating models with a
+reason. That is the correct lineup for this data, not a shortfall in it.
 
 `data/raw/` is gitignored and stays that way. The quotes describe a real person
 at a real address, and PCW output may attract database right. Publish derived
@@ -136,13 +158,19 @@ statistics only -- never the rows.
 - **Your own renewal notice.** FCA rules require last year's premium to be shown
   alongside this year's. That is a free, real, year-on-year delta with known
   cover terms, for zero journeys.
-- **Published price indices** (ABI, Consumer Intelligence). Real, free,
-  aggregate only. Useless for per-brand work, genuinely useful for checking that
-  the synthetic index sits at a plausible level and moves at a plausible rate.
-- **A licensed vendor extract** (Consumer Intelligence, Pearson Ham, Insurance
-  DataLab). The only route to per-brand, per-risk data at scale, which is why
+- **Published price indices** (ABI, Consumer Intelligence, Defaqto). Real,
+  free, aggregate only. Useless for per-brand work, genuinely useful for
+  checking that the synthetic index sits at a plausible level and moves at a
+  plausible rate. None is a downloadable file; the ONS contents-insurance CPI
+  series (D7F2) is, and the FCA value-measures spreadsheet gives per-underwriter
+  claims metrics but no prices. `docs/DATA-SOURCES.md` has the URLs.
+- **A licensed vendor extract** (Consumer Intelligence, or Defaqto Market
+  Pricing, which bought Pearson Ham's pricing business in January 2026). The
+  only route to per-brand, per-risk data at scale, which is why
   `collect/vendor.py` targets that shape. Licensed, priced accordingly, and
   governed by terms that override anything in this document.
+  `docs/VENDOR-EXTRACTS.md` says what each delivers. Insurance DataLab holds
+  firm performance data, not prices, and is not a source for this.
 
 ## The boundary
 

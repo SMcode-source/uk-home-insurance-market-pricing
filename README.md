@@ -38,9 +38,13 @@ collect/  →  features/  →  models/  →  evaluate/  →  market/
    the former).
 2. **Features** — log-premium target, geography as risk features not raw
    postcode (`geo.py` resolves real UK postcodes).
-3. **Models** — eleven approaches from a geometric mean to per-brand boosting.
+3. **Models** — twelve approaches from a geometric mean to per-brand boosting.
 4. **Evaluate** — temporal and spatial holdouts, premium *and* ranking accuracy.
-5. **Market** — Monte Carlo over quote/decline, then cheapest-N and a weekly index.
+   The data decides which approaches run (`evaluate/adequacy.py`): a
+   single-property panel gets the level models, a cross-section gets the lot.
+5. **Market** — Monte Carlo over quote/decline, then cheapest-N and a weekly index;
+   and, on observed quotes, the best price, top-5 and spread directly
+   (`market/observed.py`).
 
 ## The approaches under test
 
@@ -48,6 +52,7 @@ collect/  →  features/  →  models/  →  evaluate/  →  market/
 |---|---|---|
 | `global_geomean` | one number | the floor any model must clear |
 | `brand_geomean` | per-brand mean | deceptively strong — beat this or stop |
+| `brand_last_level` | last week's level per brand × channel, carried forward | the thin-panel baseline; the only kind of model a single property can support |
 | `ridge_log` | log-linear ridge | right shape for a purely multiplicative engine |
 | `ebm_pooled` | EBM, brand as feature | readable curves, cheap |
 | `ebm_per_brand` | one EBM per brand | **the design recommendation** |
@@ -58,9 +63,44 @@ collect/  →  features/  →  models/  →  evaluate/  →  market/
 | `gbm_per_brand_trend` | + forward drift correction | forecasts past the training weeks |
 | `ebm_per_brand_trend` | + forward drift correction | same, on the readable model |
 
-Adding a twelfth is one class plus a `@register` decorator — the evaluation code
-never changes. Approaches whose library is missing are reported as **skipped**,
-never silently dropped.
+Adding a thirteenth is one class plus a `@register` decorator — the evaluation
+code never changes. Approaches whose library is missing are reported as
+**skipped**, never silently dropped.
+
+### The data decides the lineup
+
+The harness will fit and rank anything. On a hand-collected panel — one real
+property, weekly — every risk feature is a constant, so a rating model fits the
+mean and ranks the leaderboard by noise, and a spatial split holds out the only
+postcode area there is. Neither crashes; both look plausible. So
+`evaluate/adequacy.py` inspects the model matrix before anything is fitted and
+prints what it found:
+
+```
+tier: level_only
+constant across every risk: log_sum_insured, voluntary_excess, ...
+1 postcode area(s): no spatial split.
+excluded -- the data cannot support these:
+  gbm_per_brand        no risk feature varies across the risks present; ...
+eligible: global_geomean, brand_geomean, brand_last_level
+```
+
+Three tiers: `level_only` (nothing about the risk varies — only a price level
+per brand and channel over time is estimable), `thin` (features vary over too
+few risks to trust a rating fit; everything runs, with that warning), and
+`cross_section` (the full lineup). An explicit `--only` overrides the exclusion
+and says so, because someone naming an approach on thin data is running an
+experiment. Every run writes `adequacy.json` beside its leaderboard.
+
+`brand_last_level` is what the `level_only` tier is for: the median log-premium
+of the last observed week per brand and channel, carried forward, with
+`recalibrate()` replacing it each week. On a fixed panel with a drifting level
+it beats `brand_geomean` (2.41% vs 5.24% MdAPE on an eight-week single-property
+test panel, 1.44% under weekly refresh). On a rotating cross-section it loses
+(43.64 vs 42.31 on the sample data), because last week's brand median is
+confounded with last week's mix — exactly the reason `drift.py` reads the level
+off residuals rather than weekly means. It is a baseline for fixed panels, not
+a rating model.
 
 ### Forecasting past the last week you trained on
 
@@ -146,15 +186,34 @@ s = CollectionSession(
     brands=["Aviva", "AXA", "Admiral", "LV="],
     aliases=[ChannelAlias("pcw_ctm", "you+ctm@example.com", "CtM")],
 )
-s.write_template("data/raw/2026-W35.csv")   # fill in by hand, then:
-rows, problems = read_session("data/raw/2026-W35.csv")
+s.write_template("data/raw/2026-W35.csv")   # fill in by hand
 ```
+
+or, from the command line, `scripts/start_collection.py` writes the same grid
+from `config/providers.yml` plus a `data/raw/risks.yml` skeleton describing the
+property that was actually quoted. Fill both in, then:
+
+```bash
+python scripts/ingest_session.py data/raw/2026-W35.csv --risks data/raw/risks.yml --geo data/geo
+```
+
+validates every row through the same schema a vendor extract passes through,
+resolves brands against `providers.yml`, reports coverage per session, appends
+to `data/processed/manual/` (re-ingesting a corrected grid replaces rows rather
+than duplicating them), geo-enriches the risk, and says what the resulting data
+can support. It then prints the `run_poc.py` command for it.
 
 The template pre-fills the full (risk × channel × brand) grid on purpose: a
 provider you could not get a quote from leaves a **visible empty row** instead of
 vanishing. `coverage_report()` then separates *declined* (market signal) from
 *missing* (collection gap). Treating those alike is the fastest way to bias a
 top-5 list.
+
+The risk file exists for the same reason the vendor audit has a
+`no_risk_attributes` BLOCKER: a grid records what each brand *said*, not what
+was *asked*. Its required fields are left blank rather than defaulted, so an
+unfilled entry fails validation instead of quietly describing a property nobody
+quoted. It describes a real address and lives in gitignored `data/raw/`.
 
 **Identity policy** — vary the contact details, keep the rating details real.
 Per-channel email aliases are sensible data hygiene and are supported directly.
@@ -174,7 +233,9 @@ panellists. See `docs/DESIGN.md`.
 `docs/COLLECTION.md` is the plan for the first real sample — how to spend ~50
 rows so they answer something the synthetic data is currently guessing at, which
 fields may be varied and which may not, and the traps (top-N censoring, saved
-quote caches, monthly APR) that would quietly ruin it.
+quote caches, monthly APR) that would quietly ruin it. `docs/DATA-SOURCES.md`
+records, with citations, where quote-level and price data for the tracked
+brands can actually be obtained and which of it is programmatically ingestible.
 
 ## Real postcodes
 
@@ -226,33 +287,71 @@ rather than guessed at.
 
 ## Vendor extracts
 
-`collect/vendor.py` maps a licensed CI or Defaqto extract onto the canonical
-schema. It is **mapping-driven**: no real extract has been seen, so the built-in
-`CI_SPEC` and `DEFAQTO_SPEC` column names are provisional and will be wrong in
-detail. Correcting them is a config edit, never a change to the loader.
+Two vendors sell per-brand, per-quote UK home pricing data in 2026: **Consumer
+Intelligence** (Market View, Underwriter View, daily benchmarking) and **Defaqto
+Market Pricing** (the former Pearson Ham business, acquired January 2026 and
+rebranded June 2026). `docs/VENDOR-EXTRACTS.md` records what each is known to
+deliver, with citations, and the questions to put to them before the first file.
+Neither publishes a data dictionary, so no column name in this repo has been
+checked against a real file.
+
+`collect/vendor.py` maps whatever arrives onto the canonical schema. It is
+**mapping-driven**: a `VendorSpec` names the vendor's columns for each canonical
+field and declares the facts the file cannot state. Specs live as YAML under
+`config/vendor_specs/` (`ci.yml`, `defaqto.yml`, and `pearson_ham.yml` for
+historic files) with Python twins in the module; correcting one is a config
+edit, never a change to the loader. The three steps when a delivery lands:
 
 ```bash
-python scripts/inspect_vendor.py data/raw/sample.csv
+python scripts/inspect_vendor.py data/raw/ci/market_view.xlsx --sheet "Raw Data" --header-row 2
 ```
 
 profiles every column, guesses which canonical field it is, and prints a draft
-`VendorSpec` to paste and correct. Then:
+spec. Add `--draft-spec config/vendor_specs/ci.yml` to save it, then correct the
+column names against the vendor's documentation and fill in the four declared
+facts. Then:
 
 ```bash
-python scripts/inspect_vendor.py data/raw/sample.csv --spec ci --geo data/geo --write
+python scripts/inspect_vendor.py data/raw/ci/ --spec ci --geo data/geo --write
 ```
 
-maps, audits, geo-enriches, validates and writes canonical parquet for the POC.
-`--geo` matters: an extract carries a postcode but not the risk features derived
-from it, and `build_matrix` refuses risks without them rather than guessing.
+maps, audits, geo-enriches, validates and writes canonical parquet to
+`data/processed/ci/`. The path can be one file, several, a folder or a glob, so
+a vendor that sends one file per day or week is loaded by pointing at the
+folder; `--append` adds the next delivery to what is already there, replacing
+rows with the same risk, brand, channel and date. CSV in any delimiter (also
+gzip or zip), TSV, Excel (`sheet` and `header_row` on the spec), Parquet and
+JSON all read, and a `layout: wide` spec melts a brands-across-the-columns
+table into rows. `--geo` matters: an extract carries a postcode but not the
+risk features derived from it, and `build_matrix` refuses risks without them
+rather than guessing.
 
 ```bash
-python scripts/run_poc.py --data data/processed/quotes.parquet --risks data/processed/risks.parquet
+python scripts/market_price.py --data data/processed/ci/quotes.parquet --risks data/processed/ci/risks.parquet
+python scripts/run_poc.py --data data/processed/ci/quotes.parquet --risks data/processed/ci/risks.parquet --out data/processed/ci/poc
 ```
 
-Whether the rows came from CI, Defaqto or a notebook is invisible downstream —
+The first needs no model and no geo features; the second fits the lineup.
+Whether the rows came from CI, Defaqto or a notebook is invisible downstream,
 except that `source` is retained, because accuracy differs by provenance and
 mixing sources silently would hide that.
+
+### Best price, top-5 and spread from the quotes themselves
+
+`market/observed.py` is arithmetic on observed quotes, and its definitions are
+the point. For every risk and date it reports the **best price** (cheapest
+brand, each brand counted once at its cheapest channel), the **top-5 market
+price** (mean, median and 5th price of the five cheapest brands), and the
+**spread** (5th price minus best, in GBP and as a share of best). Declines are
+counted but never priced; fewer than five brands quoting is reported, not
+padded. `scripts/market_price.py` prints the headline for the latest period,
+a per-period table with an index on the fixed basket, per-brand
+competitiveness (quote rate, share of risk-periods cheapest, share in the top
+five, median gap to the leader) and the direct-versus-PCW gap per brand, and
+writes each as CSV with a `market.json` recording the definitions used.
+`--by-channel` ranks within each PCW instead; `--period week` buckets daily
+deliveries. It also runs straight off vendor files with `--spec`, so a top-5
+market price is available the day a file arrives.
 
 One thing a vendor extract can never supply is the **index basket**. `in_basket`
 marks the properties you committed to re-quoting weekly; which risks those are is
@@ -329,20 +428,28 @@ drifting.
 config/providers.yml     brand -> underwriter -> channel; tiering for cadence
 src/mktpricing/
   schema.py              canonical Quote and Risk records
-  collect/session.py     manual collection templates and validation
+  collect/session.py     manual collection: grid, risk definitions, -> canonical
   collect/synthetic.py   synthetic market with known ground truth
-  collect/vendor.py      CI/Defaqto extract mapping + audits
+  collect/vendor.py      vendor extract reading (csv/xlsx/folders), mapping + audits
+config/vendor_specs/     CI / Defaqto / historic Pearson Ham specs as YAML
   features/build.py      log-premium target, feature assembly
   features/geo.py        postcode -> flood, crime, deprivation, area value
-  models/                registry + the eleven approaches + quotability
+  models/                registry + the twelve approaches + quotability
   models/drift.py        forward drift correction and weekly recalibration
+  evaluate/adequacy.py   what the data can support; which approaches run
   evaluate/              splits, metrics, the comparison harness
   market/simulate.py     Monte Carlo -> cheapest-N, weekly index
+  market/observed.py     best price, top-5, spread from observed quotes
 scripts/run_poc.py       end-to-end run
+scripts/market_price.py  observed market report from parquet or vendor files
+scripts/start_collection.py  write the grid and risk skeleton for a sitting
+scripts/ingest_session.py    filled-in grids -> validated, geo-enriched parquet
 scripts/inspect_vendor.py  profile / map / audit / enrich a vendor extract
 scripts/make_sample_extract.py  synthetic vendor-shaped extract, 8 flavours
 docs/DESIGN.md           why it is built this way -- read before changing models
 docs/COLLECTION.md       plan for the first real sample; read before quoting
+docs/DATA-SOURCES.md     where real quote and price data can be had, with citations
+docs/VENDOR-EXTRACTS.md  what CI and Defaqto deliver, field by field; questions to ask
 ui/index.html            self-contained results summary; open it in a browser
 ui/render.py             writes the page's figures from a run -- never by hand
 ui/build_public.py       wraps the fragment as a standalone public page
