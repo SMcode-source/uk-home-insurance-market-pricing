@@ -10,6 +10,8 @@ dependencies = [
     "pyarrow>=14",
     "pydantic>=2.5",
     "pyyaml>=6",
+    # Vendor extracts arrive as Excel workbooks as often as CSV.
+    "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]

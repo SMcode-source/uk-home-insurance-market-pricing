@@ -1,0 +1,69 @@
+# Pearson Ham -- HISTORIC raw data files only (pre-January 2026).
+#
+# Pearson Ham Group sold its insurance pricing business to Defaqto in January
+# 2026; it was rebranded Defaqto Market Pricing in June 2026. A current delivery
+# is `defaqto.yml`. This spec is for older raw files a licensee may receive as
+# history, whose layout may differ from the current one.
+#
+# PROVISIONAL. No real extract has been profiled; every column name below is a
+# guess. Daily files across the four PCWs: point inspect_vendor.py at the folder
+# and it stacks them. Whether the file carries declines, the underwriter, or the
+# full panel is unconfirmed; see docs/VENDOR-EXTRACTS.md for the questions.
+name: Pearson Ham (historic raw files)
+source: vendor_ph
+columns:
+  risk_id: RiskRef
+  brand: Brand
+  underwriter: Underwriter
+  channel: PCW
+  collected_on: PriceDate
+  premium: AnnualPremium
+  quoted: QuoteStatus
+  rank_on_page: Position
+  postcode: Postcode
+  policy_type: CoverType
+  building_type: PropertyType
+  construction: Construction
+  occupancy: Occupancy
+  year_built: YearBuilt
+  bedrooms: Bedrooms
+  buildings_sum_insured: BuildingsSumInsured
+  contents_sum_insured: ContentsSumInsured
+  voluntary_excess: VoluntaryExcess
+  compulsory_excess: CompulsoryExcess
+  claims_last_5y: Claims5Years
+  accidental_damage: AccidentalDamage
+values: {}
+brand_aliases: {}
+premium_basis: annual
+premium_includes_ipt: true
+declines_included: null
+truncated_to_top_n: null
+channel_default: null
+date_format: null
+dayfirst: true
+sheet: null
+header_row: 0
+delimiter: null
+encoding: null
+layout: long
+wide_brand_columns: []
+wide_ignore: []
+wide_blank_means: absent
+notes: Provisional, and for HISTORIC files only. Pearson Ham Group's insurance pricing
+  business was sold to Defaqto in January 2026 and rebranded Defaqto Market Pricing
+  in June 2026; current deliveries come under DEFAQTO_SPEC. This spec exists for pre-2026
+  raw files a licensee may receive as history, whose layout may differ. Four PCWs,
+  daily, a panel of real consumers rotated after a few days; whether the file carries
+  declines, the underwriter, or a full panel is unconfirmed. Column names are guesses
+  until a file has been profiled. docs/VENDOR-EXTRACTS.md.
+
+# ---- declared, never inferred -------------------------------------------
+# premium_basis:        "annual" or "monthly" -- the file's own basis
+# premium_includes_ipt: true if the premium already carries 12% IPT
+# declines_included:    true / false; null = not yet confirmed by the vendor
+# truncated_to_top_n:   null unless the vendor supplies only the cheapest N
+# ---- layout -----------------------------------------------------------------
+# sheet / header_row:   Excel workbooks -- which tab, how many title rows
+# delimiter / encoding: CSV -- null means sniff / utf-8 then cp1252
+# layout: wide          one column per brand; see collect/vendor.py melt_wide()

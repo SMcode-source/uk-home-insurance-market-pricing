@@ -1,0 +1,69 @@
+# Defaqto Market Pricing -- Market Pricing Intelligence raw data extract.
+# (The former Pearson Ham pricing business: acquired January 2026, rebranded
+# June 2026. Same panel, same team.)
+#
+# PROVISIONAL. No real extract has been profiled; every column name below is a
+# guess from published vendor terminology. Prices are collected daily from the
+# four PCWs only -- no direct channel is mentioned -- on real-consumer profiles
+# that run for a few consecutive days and drop out. Expect the audit to report
+# a rotating panel; the index is then built from whatever sub-panel repeats.
+# Their public index is a top-5 average, so ask whether the extract is the full
+# results page or a top-N cut before trusting per-brand numbers.
+# docs/VENDOR-EXTRACTS.md has the field inventory and the vendor questions.
+name: Defaqto Market Pricing
+source: vendor_dfq
+columns:
+  risk_id: RiskId
+  brand: ProviderName
+  channel: Source
+  collected_on: CollectionDate
+  premium: Premium
+  rank_on_page: Position
+  postcode: Postcode
+  policy_type: PolicyType
+  building_type: PropertyType
+  construction: ConstructionType
+  occupancy: OccupancyType
+  year_built: YearOfConstruction
+  bedrooms: NumberOfBedrooms
+  buildings_sum_insured: BuildingsCover
+  contents_sum_insured: ContentsCover
+  voluntary_excess: VoluntaryExcess
+  compulsory_excess: CompulsoryExcess
+  claims_last_5y: PreviousClaims
+  accidental_damage: AccidentalDamage
+values: {}
+brand_aliases: {}
+premium_basis: annual
+premium_includes_ipt: true
+declines_included: null
+truncated_to_top_n: null
+channel_default: null
+date_format: null
+dayfirst: true
+sheet: null
+header_row: 0
+delimiter: null
+encoding: null
+layout: long
+wide_brand_columns: []
+wide_ignore: []
+wide_blank_means: absent
+notes: Provisional. Defaqto Market Pricing is the former Pearson Ham pricing business
+  (acquired January 2026, rebranded June 2026). Prices come from the four PCWs only
+  -- no direct channel is mentioned anywhere -- on a real-consumer panel where each
+  profile runs for a few consecutive days and drops out, so expect the audit's rotating_panel
+  finding and index off matched risks only. Premium basis, IPT, decline rows and top-N
+  truncation are all unconfirmed; their public index is a top-5 average, so a top-5
+  cut is a real possibility. Column names are guesses until a file has been profiled.
+  docs/VENDOR-EXTRACTS.md.
+
+# ---- declared, never inferred -------------------------------------------
+# premium_basis:        "annual" or "monthly" -- the file's own basis
+# premium_includes_ipt: true if the premium already carries 12% IPT
+# declines_included:    true / false; null = not yet confirmed by the vendor
+# truncated_to_top_n:   null unless the vendor supplies only the cheapest N
+# ---- layout -----------------------------------------------------------------
+# sheet / header_row:   Excel workbooks -- which tab, how many title rows
+# delimiter / encoding: CSV -- null means sniff / utf-8 then cp1252
+# layout: wide          one column per brand; see collect/vendor.py melt_wide()
