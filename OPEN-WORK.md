@@ -8,7 +8,7 @@ that and this disagree, **this file wins**.
 |---|---|
 | `main` head | `47ef935` "Merge: manual ingest path, adequacy tiers, vendor file loading, observed market price", plus a header-only commit on top pointing here |
 | Pushed | yes, as of the header-only commit above. The public page repo is untouched: `ui/index.html` did not change (`render.py --check` passes) |
-| Remote | `SMcode-source/uk-home-insurance-market-pricing` (private) |
+| Remote | `SMcode-source/uk-home-insurance-market-pricing` (public since 2026-09-07; `data/` has never been committed) |
 | Public page | `SMcode-source/home-insurance-price-accuracy` at `1121147` → smcode-source.github.io/home-insurance-price-accuracy/. No local clone survives; `gh repo clone` it when needed |
 | Tests | Full suite green locally on 2026-09-06 with all the uncommitted work below: 281 passed under `.venv/Scripts/python -m pytest` (1h25m wall clock, but that run shared the machine with three vendor-load smoke runs; the previous clean run of 236 took 6m20s). CI runs on every push and fails on skips, so it — not this machine — is the authority; never a bare `python`. `openpyxl` is now a core dependency; CI installs from `pyproject.toml`, so it will pick it up |
 | Uncommitted | no |
